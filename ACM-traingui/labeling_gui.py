@@ -31,11 +31,7 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import proj3d
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-import ccv
-
-
-
-
+from . import ccv
 
 def rodrigues2rotMat_single(r):
     theta = np.power(r[0]**2 + r[1]**2 + r[2]**2, 0.5)
@@ -177,7 +173,7 @@ def sort_label_sequence(seq):
     return seq_ordered
 
 def load_cfg(path):
-    cfg_file = open(path, 'r')
+    cfg_file = open("./config/"+path, 'r')
     cfg = eval(cfg_file.read()) # this is ugly since eval is used (make sure only trusted strings are evaluated)
     cfg_file.close()
     return cfg

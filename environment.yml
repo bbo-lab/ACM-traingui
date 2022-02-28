@@ -1,0 +1,8 @@
+name: ACM-traingui
+channels:
+  - defaults
+dependencies:
+  - python=3.9
+  - pip:
+    - pyqt5
+
