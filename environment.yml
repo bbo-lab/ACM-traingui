@@ -2,7 +2,10 @@ name: ACM-traingui
 channels:
   - defaults
 dependencies:
-  - python=3.9
+  - python=3.8
+  - pip
+  - pyqt=5.9.2
+  - matplotlib=3.1.3
+  - numpy=1.18.1
   - pip:
-    - pyqt5
-
+    - bbo-calibcamlib

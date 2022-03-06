@@ -7,7 +7,8 @@ def main():
     # Parse inputs
     parser = argparse.ArgumentParser(description="ACM-traingui - Simple GUI to .")
     parser.add_argument('INPUT_PATH', type=str, help="Directory with detect job configuration")
-    parser.add_argument('--labels', type=str, required=False, nargs='*', default=None)
+    parser.add_argument('--labels', type=str, required=False, nargs='*', default=None, help="If given, merges labes.npz in given dirs into labels.npz file specified in INPUT_PATH config file")
+    parser.add_argument('--check', type=str, required=False, nargs=1, default=None, help="Prints sorted list of square errors for labels in INPUT_PATH/labels.npz, using specified camera calibration")
 
     args = parser.parse_args()
     input_path = os.path.expanduser(args.INPUT_PATH)
@@ -17,10 +18,7 @@ def main():
     sys.path.insert(0,input_path)
     print(input_path)
 
-    if args.labels is None:
-        from . import labeling_gui
-        labeling_gui.main()
-    else:
+    if args.labels is not None:
         import dlcdetectConfig as cfg
 
         if os.path.isfile(cfg.filePath_labels):
@@ -34,13 +32,46 @@ def main():
                 labels_new = np.load(labelsdir+"/labels.npz", allow_pickle=True)['arr_0'].item()
                 print(list(labels_new.keys()))
                 print()
-                labels = labels_new | labels # Python 3.9+
+                labels = {**labels, **labels_new} # labels | labels_new # Python 3.9+
             except:
                 print("Error loading")
 
         np.savez(cfg.filePath_labels, labels)
         print()
         print(f"{len(labels.keys())} frames labelled")
+    elif args.check is not None:
+        import calibcamlib
+        print(calibcamlib.__path__)
+        cs = calibcamlib.Camerasystem.from_calibcam_file(args.check[0])
+        labels = np.load(args.INPUT_PATH+"/labels.npz",allow_pickle=True)['arr_0'].item()
+
+        frame = [];
+        marker = [];
+        dists = [];
+        mdist = [];
+ 
+        for i in labels.keys():
+            for m in labels[i].keys():
+                (X,P,V) = cs.triangulate_3derr(labels[i][m][:,np.newaxis,:])
+                ds = calibcamlib.helper.calc_3derr(X,P,V)[1]
+                if np.any(~np.isnan(ds)):
+                    frame.append(i)
+                    marker.append(m)
+                    dists.append(ds)
+                    mdist.append(np.nanmax(ds))
+
+        idx = np.argsort(np.asarray(mdist))[::-1]
+        mdists = np.asarray(mdist)[idx]
+        frames = np.asarray(frame)[idx]
+        markers = np.asarray(marker)[idx]
+        distss = np.asarray(dists)[idx]
+
+        for i,md in enumerate(mdists):
+            print(f'{frames[i]:6} - {markers[i]:>25} - {mdists[i]:1f} - {distss[i]}')
+
+    else:
+        from . import labeling_gui
+        labeling_gui.main()
 
     return
 
