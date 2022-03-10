@@ -50,6 +50,7 @@ def main():
         dists = [];
         mdist = [];
         pdists = [];
+        mpdist = [];
  
         for i in labels.keys():
             for m in labels[i].keys():
@@ -65,8 +66,9 @@ def main():
                     dists.append(ds)
                     mdist.append(np.nanmax(ds))
                     pdists.append(pd)
+                    mpdist.append(np.nanmax(pd))
 
-        idx = np.argsort(np.asarray(mdist))[::-1]
+        idx = np.argsort(np.asarray(mpdist))[::-1]
         mdists = np.asarray(mdist)[idx]
         frames = np.asarray(frame)[idx]
         markers = np.asarray(marker)[idx]
