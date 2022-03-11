@@ -49,25 +49,34 @@ def main():
         marker = [];
         dists = [];
         mdist = [];
+        pdists = [];
+        mpdist = [];
  
         for i in labels.keys():
             for m in labels[i].keys():
                 (X,P,V) = cs.triangulate_3derr(labels[i][m][:,np.newaxis,:])
                 ds = calibcamlib.helper.calc_3derr(X,P,V)[1]
+
+                x = cs.project(X)
+                pd = np.sum((labels[i][m][:,np.newaxis,:]-x)**2,axis=2).T[0]
+
                 if np.any(~np.isnan(ds)):
                     frame.append(i)
                     marker.append(m)
                     dists.append(ds)
                     mdist.append(np.nanmax(ds))
+                    pdists.append(pd)
+                    mpdist.append(np.nanmax(pd))
 
-        idx = np.argsort(np.asarray(mdist))[::-1]
+        idx = np.argsort(np.asarray(mpdist))[::-1]
         mdists = np.asarray(mdist)[idx]
         frames = np.asarray(frame)[idx]
         markers = np.asarray(marker)[idx]
         distss = np.asarray(dists)[idx]
+        pdistss = np.asarray(pdists)[idx]
 
         for i,md in enumerate(mdists):
-            print(f'{frames[i]:6} - {markers[i]:>25} - {mdists[i]:1f} - {distss[i]}')
+            print(f'{frames[i]:6} | {markers[i]:>25} | {np.nanmax(distss[i]):5.2f} | {list(map("{:5.2f}".format,distss[i]))} | {np.nanmax(pdistss[i]):6.1f} | {list(map("{:7.2f}".format,pdistss[i]))}')
 
     else:
         from . import labeling_gui
