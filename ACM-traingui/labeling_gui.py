@@ -32,6 +32,7 @@ from mpl_toolkits.mplot3d import proj3d
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from . import ccv
+#import ccv
 
 def rodrigues2rotMat_single(r):
     theta = np.power(r[0]**2 + r[1]**2 + r[2]**2, 0.5)
@@ -173,7 +174,7 @@ def sort_label_sequence(seq):
     return seq_ordered
 
 def load_cfg(path):
-    cfg_file = open("./config/"+path, 'r')
+    cfg_file = open(path, 'r')
     cfg = eval(cfg_file.read()) # this is ugly since eval is used (make sure only trusted strings are evaluated)
     cfg_file.close()
     return cfg
@@ -239,9 +240,10 @@ class SelectUserWindow(QDialog):
     
     
 class MainWindow(QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, fileConfig=None):
         if master:
-            fileConfig = 'labeling_gui_cfg.py' # use hard coded path here
+            if fileConfig is None:
+                fileConfig = 'labeling_gui_cfg.py' # use hard coded path here
             self.cfg = load_cfg(fileConfig)
         else:
             if os.path.isdir(drive):
@@ -2304,9 +2306,9 @@ class MainWindow(QMainWindow):
         else:
             print('WARNING: Auto-repeat is not supported')
 
-def main():
+def main(configFile=None):
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = MainWindow(fileConfig=configFile)
     sys.exit(app.exec_())          
         
         

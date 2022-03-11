@@ -71,7 +71,7 @@ def main():
 
     else:
         from . import labeling_gui
-        labeling_gui.main()
+        labeling_gui.main(configFile=args.INPUT_PATH)
 
     return
 
