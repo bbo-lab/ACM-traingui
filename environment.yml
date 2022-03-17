@@ -1,4 +1,4 @@
-name: ACM-traingui
+name: bbo_acm-traingui
 channels:
   - defaults
 dependencies:
