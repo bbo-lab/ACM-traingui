@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-master = True
-drive = 'O:/analysis/'
-
 import copy
 import numpy as np
 import os
@@ -31,8 +28,8 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import proj3d
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from . import ccv
-#import ccv
+import imageio
+from ccvtools import rawio
 
 def rodrigues2rotMat_single(r):
     theta = np.power(r[0]**2 + r[1]**2 + r[2]**2, 0.5)
@@ -192,11 +189,13 @@ def save_cfg(path, cfg):
     return cfg
     
 class SelectUserWindow(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, drive=[]):
         super(SelectUserWindow, self).__init__(parent)
         self.setGeometry(0, 0, 256, 128)
         self.center()
         self.setWindowTitle('Select User')
+        
+        self.drive = drive
         
         self.user_list = self.get_user_list()
         
@@ -217,7 +216,7 @@ class SelectUserWindow(QDialog):
         self.setLayout(self.selecting_layout)
     
     def get_user_list(self):
-        user_list = sorted(os.listdir(drive + 'pose/data/user'))
+        user_list = sorted(os.listdir(self.drive + 'pose/data/user'))
         return user_list
     
     def center(self):
@@ -231,25 +230,32 @@ class SelectUserWindow(QDialog):
         user = self.user_list[user_id]
         return user
 
-    def start(parent=None):
-        selecting = SelectUserWindow(parent)
+    def start(parent=None,drive=[]):
+        selecting = SelectUserWindow(parent,drive)
         exit = selecting.exec_()
         user = selecting.get_user()
         return (user, exit == QDialog.Accepted)
 
     
     
-class MainWindow(QMainWindow):
-    def __init__(self, parent=None, fileConfig=None):
-        if master:
+class MainWindow(QMainWindow):   
+    def __init__(self, parent=None, fileConfig=None, master=True, drive=None):
+        self.master = master
+        
+        if drive is None:
+            self.drive = 'O:/analysis/'
+        else:
+            self.drive = drive
+        
+        if self.master:
             if fileConfig is None:
                 fileConfig = 'labeling_gui_cfg.py' # use hard coded path here
             self.cfg = load_cfg(fileConfig)
         else:
-            if os.path.isdir(drive):
-                self.user, correct_exit = SelectUserWindow.start()
+            if os.path.isdir(self.drive):
+                self.user, correct_exit = SelectUserWindow.start(drive=self.drive)
                 if correct_exit:
-                    fileConfig = drive + 'pose/data/user/' + self.user + '/' + 'labeling_gui_cfg.py' # use hard coded path here
+                    fileConfig = self.drive + 'pose/data/user/' + self.user + '/' + 'labeling_gui_cfg.py' # use hard coded path here
                     self.cfg = load_cfg(fileConfig)
                 else:
                     sys.exit()
@@ -333,10 +339,10 @@ class MainWindow(QMainWindow):
         self.autoSaveCounter = int(0)
         
         # create folder structure / save backup / load last pose 
-        if not(master):
+        if not(self.master):
             # folder structure
             standardRecordingFolder_split = self.cfg['standardRecordingFolder'].split('/')
-            folder = drive + 'pose/user' + \
+            folder = self.drive + 'pose/user' + \
                      '/' + self.user
             if not(os.path.isdir(folder)):
                 os.mkdir(folder)
@@ -449,7 +455,7 @@ class MainWindow(QMainWindow):
                 self.RX1 = self.result['RX1_fit']
                 self.tX1 = self.result['tX1_fit']
             else:
-                print('WARNING: Autoloading failed. Calibration file does not exist.')
+                print(f'WARNING: Autoloading failed. Calibration file {self.standardCalibrationFile} does not exist.')
 
             # origin / coord in coordinate system of reference camera (only needed to plot reprojection lines until ground of arena floor)
             if os.path.isfile(self.standardOriginCoordFile):
@@ -458,7 +464,7 @@ class MainWindow(QMainWindow):
                 self.origin = self.origin_coord['origin']
                 self.coord = self.origin_coord['coord']
             else:
-                print('WARNING: Autoloading failed. Origin/Coord file does not exist.')
+                print(f'WARNING: Autoloading failed. Origin/Coord file {self.standardOriginCoordFile} does not exist.')
 
             # load model
             if os.path.isfile(self.standardModelFile):
@@ -481,7 +487,7 @@ class MainWindow(QMainWindow):
                     self.labels3d_sequence = list([])
                     print('WARNING: Model does not contain 3D Labels! This might lead to incorrect behavior of the GUI.')
             else:
-                print('WARNING: Autoloading failed. 3D model file does not exist.')
+                print(f'WARNING: Autoloading failed. 3D model file {self.standardModelFile} does not exist.')
                 
             # load sketch
             if os.path.isfile(self.standardSketchFile):
@@ -494,10 +500,10 @@ class MainWindow(QMainWindow):
                     self.sketch_locations.append(self.sketch_annotation[i_label])
                 self.sketch_locations = np.array(self.sketch_locations, dtype=np.float64)
             else:
-                print('WARNING: Autoloading failed. Sketch file does not exist.')
+                print(f'WARNING: Autoloading failed. Sketch file {self.standardSketchFile} does not exist.')
 
             # load labels
-            if (master):
+            if (self.master):
                 if os.path.isfile(self.standardLabelsFile):
                     self.labelsAreLoaded = True
                     #self.labels2d_all = np.load(self.standardLabelsFile, allow_pickle=True).item()
@@ -508,7 +514,7 @@ class MainWindow(QMainWindow):
                         if (self.list_labels3d.currentItem().text() in self.labels2d.keys()):
                             self.selectedLabel2d = np.copy(self.labels2d[self.list_labels3d.currentItem().text()])
                 else:
-                    print('WARNING: Autoloading failed. Labels file does not exist.')
+                    print(f'WARNING: Autoloading failed. Labels file {self.standardLabelsFile} does not exist.')
             else:
                 #self.standardLabelsFile = self.standardLabelsFolder + '/' + 'labels.npy'
                 self.standardLabelsFile = self.standardLabelsFolder + '/' + 'labels.npz'
@@ -1666,6 +1672,7 @@ class MainWindow(QMainWindow):
         if fileName:
             #self.labels2d_all = np.load(fileName, allow_pickle=True).item()
             self.labels2d_all = np.load(fileName, allow_pickle=True)['arr_0'].item()
+            self.standardLabelsFile = fileName;
             if self.i_pose in self.labels2d_all.keys():
                 self.labels2d = copy.deepcopy(self.labels2d_all[self.i_pose])
             if (self.label3d_select_status):
@@ -1678,14 +1685,15 @@ class MainWindow(QMainWindow):
         self.button_loadLabels.clearFocus()
     
     def button_saveLabels_press(self):
-        if (True): # FIXME # set to True if you want to decide where to save labels manually
+        if (self.master):
             dialog = QFileDialog()
             dialog.setStyleSheet("background-color: white;")
             dialogOptions = dialog.Options()
             dialogOptions |= dialog.DontUseNativeDialog
+            print(self.standardLabelsFile)
             fileName, _ = QFileDialog.getSaveFileName(dialog,
                                                       "Save labels file",
-                                                      ""
+                                                      os.path.dirname(self.standardLabelsFile),
                                                       "npz files (*.npz)",
                                                       options=dialogOptions)
             if fileName:
@@ -1778,7 +1786,7 @@ class MainWindow(QMainWindow):
         self.button_remove.clearFocus()
         
     def list_labels3d_select(self):
-        if (self.cfg['autoSave'] and not(master)):
+        if (self.cfg['autoSave'] and not(self.master)):
             self.autoSaveCounter = self.autoSaveCounter + 1
             if ((np.mod(self.autoSaveCounter, self.cfg['autoSaveN0']) == 0)):
                 if bool(self.labels2d):
@@ -2259,8 +2267,8 @@ class MainWindow(QMainWindow):
             self.button_saveModel_press()
         if (self.cfg['exitSaveLabels']):
             self.button_saveLabels_press()
-        #
-        if not(master):
+        
+        if not(self.master):
             exit_status = dict()
             exit_status['i_pose'] = self.i_pose
             np.save(self.standardLabelsFolder + '/' + 'exit_status.npy', exit_status)
@@ -2306,9 +2314,9 @@ class MainWindow(QMainWindow):
         else:
             print('WARNING: Auto-repeat is not supported')
 
-def main(configFile=None):
+def main(configFile=None,master=True,drive=None):
     app = QApplication(sys.argv)
-    window = MainWindow(fileConfig=configFile)
+    window = MainWindow(fileConfig=configFile,master=master,drive=drive)
     sys.exit(app.exec_())          
         
         
