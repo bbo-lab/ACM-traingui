@@ -74,6 +74,27 @@ def calc_dst(m_udst, k):
     m_dst = np.concatenate([[x_2], [y_2], [ones]], 0).T
     return m_dst
 
+def read_video_meta(reader):
+    header = reader.get_meta_data()
+    header['nFrames'] = len(reader) # len() may be Inf for formats where counting frames can be expensive
+    if 1000000000000000<header['nFrames']:
+        try:
+            header['nFrames'] = reader.count_frames()
+        except:
+            print('Could not determine number of frames')
+            raise UnsupportedFormatException
+
+    # Add required headers that are not normally part of standard video formats but are required information
+    if "sensor" in header:
+        header['offset'] = tuple(header['sensor']['offset'])
+        header['sensorsize'] = tuple(header['sensor']['size'])
+    else:
+        print("Infering sensor size from image and setting offset to 0!")
+        header['sensorsize'] = tuple(reader.get_data(0).shape[0:2])
+        header['offset'] = tuple(np.asarray([0, 0]))
+        
+    return header 
+
 # look at: Rational Radial Distortion Models with Analytical Undistortion Formulae, Lili Ma et al.
 # source: https://arxiv.org/pdf/cs/0307047.pdf
 # only works for k = [k1, k2, 0, 0, 0]
@@ -172,6 +193,7 @@ def sort_label_sequence(seq):
 
 def load_cfg(path):
     cfg_file = open(path, 'r')
+    datadir = os.path.dirname(os.path.abspath(path))+'/../../../data'
     cfg = eval(cfg_file.read()) # this is ugly since eval is used (make sure only trusted strings are evaluated)
     cfg_file.close()
     return cfg
@@ -416,11 +438,12 @@ class MainWindow(QMainWindow):
                 self.nPoses = np.zeros(self.nCameras, dtype=np.int64)
                 index = 0
                 for fileName in self.recFileNames:
-                    if fileName:                
-                        info = ccv.get_header(fileName)
-                        self.nPoses[index] = info['nframes']
-                        self.xRes[index] = info['sensorsize'][0]
-                        self.yRes[index] = info['sensorsize'][1]
+                    if fileName:    
+                        reader = imageio.get_reader(fileName)
+                        header = read_video_meta(reader)
+                        self.nPoses[index] = header['nFrames']
+                        self.xRes[index] = header['sensorsize'][0]
+                        self.yRes[index] = header['sensorsize'][1]
                         index = index + 1
                     else:
                         print('WARNING: Invalid recording file')
@@ -529,7 +552,6 @@ class MainWindow(QMainWindow):
                                 self.selectedLabel2d = np.copy(self.labels2d[self.list_labels3d.currentItem().text()])
 
             
-
     def set_layout(self):
         # frame main
         self.frame_main = QFrame()
@@ -654,7 +676,8 @@ class MainWindow(QMainWindow):
                         zorder=3)
                                        
     def plot2d_plotSingleImage_ini(self, ax, i_cam):
-        self.imgs[i_cam] = ccv.get_frame(self.recFileNames[i_cam], self.i_pose + 1)
+        reader = imageio.get_reader(self.recFileNames[i_cam])
+        self.imgs[i_cam] = reader.get_data(self.i_pose)
         self.h_imgs[i_cam] = ax.imshow(self.imgs[i_cam],
                                        aspect=1,
                                        cmap='gray',
@@ -693,7 +716,8 @@ class MainWindow(QMainWindow):
         self.plot2d_drawLabels(ax, i_cam)
 
     def plot2d_plotSingleImage(self, ax, i_cam):
-        self.imgs[i_cam] = ccv.get_frame(self.recFileNames[i_cam], self.i_pose + 1)
+        reader = imageio.get_reader(self.recFileNames[i_cam])
+        self.imgs[i_cam] = reader.get_data(self.i_pose)
         self.h_imgs[i_cam].set_array(self.imgs[i_cam])
         self.h_imgs[i_cam].set_clim(self.vmin, self.vmax)
 #         self.h_titles[i_cam].set_text('camera: {:01d}, frame: {:06d}'.format(i_cam, self.i_pose))
@@ -1491,7 +1515,7 @@ class MainWindow(QMainWindow):
         recFileNames_unsorted, _ = QFileDialog.getOpenFileNames(dialog,
                                                                 "Choose recording files",
                                                                 "",
-                                                                "ccv files (*.ccv)",
+                                                                "video files (*.ccv, *.mp4, *.mkv)",
                                                                 options=dialogOptions)
         if (len(recFileNames_unsorted) > 0):
             self.recFileNames = sorted(recFileNames_unsorted)
@@ -1502,11 +1526,12 @@ class MainWindow(QMainWindow):
             self.nPoses = np.zeros(self.nCameras, dtype=np.int64)
             index = 0
             for fileName in self.recFileNames:
-                if fileName:                
-                    info = ccv.get_header(fileName)
-                    self.nPoses[index] = info['nframes']
-                    self.xRes[index] = info['sensorsize'][0]
-                    self.yRes[index] = info['sensorsize'][1]
+                if fileName:  
+                    reader = imageio.get_reader(fileName)
+                    header = read_video_meta(reader)
+                    self.nPoses[index] = header['nFrames']
+                    self.xRes[index] = header['sensorsize'][0]
+                    self.yRes[index] = header['sensorsize'][1]
                     index = index + 1
                 else:
                     print('ERROR: Invalid recording file')
@@ -2323,3 +2348,6 @@ def main(configFile=None,master=True,drive=None):
         
 if __name__ == '__main__':
     main()
+
+class UnsupportedFormatException(Exception):
+    pass
