@@ -10,3 +10,4 @@ dependencies:
   - pip:
     - bbo-calibcamlib
     - bbo-ccvtools
+    - bbo-acm-traingui
