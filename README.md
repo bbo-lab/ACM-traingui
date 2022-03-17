@@ -33,3 +33,9 @@ This gives sorted text output of 3d and reprojections errors. Reporjection error
 ### Join mode
 Run with `python -m ACM-traingui [configdir of ACM-dlcdetect] --check [multiple directories containing labels.npz files] `.
 This joins all marked labels in the labels.npz files into the labels.npz file in the dlcdetect configuration. Marked labels overwrite existing labels framewise.
+
+
+## TODO
+- Document config
+- Document sketch file (2d sketch of animal. If not presented, 3d wireframe is shown instead)
+- Document [model file](https://github.com/bbo-lab/ACM/blob/main/INPUTS.md#modelnpy)
