@@ -2,13 +2,15 @@
 # FILES
 'autoLoad': True,
 # ARENA 05:
-'standardModelFile': 'labeling_model.npy',
-'standardSketchFile': '20200205_sketch.npy',
-'standardRecordingFolder': '/media/smb/soma.ad01.caesar.de/bbo/analysis/pose/data/ccv/20200205_arena',
-'standardRecordingFileNames': list(['cam1_arena.ccv',
-                                    'cam2_arena.ccv',
-                                    'cam3_arena.ccv',
-                                    'cam4_arena.ccv']),
+'standardModelFile': datadir+'/model/model.npy', # datadir translates to [currentfile]/../../../data
+'standardSketchFile': datadir+'/sketch/20210511_sketch_1_ds.npy',
+'standardRecordingFolder': datadir+'/ccv/M220217_DW01',
+'standardRecordingFileNames': list([
+                                    'cam01VI_20220217_1.ccv',
+                                    'cam02VI_20220217_1.ccv',
+                                    'cam03VI_20220217_1.ccv',
+                                    'cam04VI_20220217_1.ccv',
+                                   ]),
 'standardCalibrationFile': 'multicalibration.npy',
 'standardOriginCoordFile': 'origin_coord.npy',
 'standardLabelsFile': 'labels.npy',

@@ -6,8 +6,9 @@ dependencies:
   - pip
   - pyqt=5.9.2
   - matplotlib=3.1.3
-  - numpy=1.18.1
+  - numpy
+  - imageio
   - pip:
     - bbo-calibcamlib
     - bbo-ccvtools
-    - bbo-acm-traingui
+      #    - bbo-acm-traingui
