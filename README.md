@@ -5,7 +5,7 @@ GUI to label frames for training of ACM-dlcdetect, by Arne Monsees
 ## Installation
 1. [Install Anaconda](https://docs.anaconda.com/anaconda/install/)
 2. Start Anaconda Prompt (Windows) / terminal (linux) and navigate into repository directory
-3. Create conda environment `conda env create -f https://raw.githubusercontent.com/bbo-lab/ACM-traingui/main/environment.yml`
+3. Create conda environment `conda env create -f https://raw.githubusercontent.com/bbo-lab/ACM-traingui/master/environment.yml`
 
 ## Running
 1. Start Anaconda Prompt (Windows) / terminal (linux) and navigate into repository directory
