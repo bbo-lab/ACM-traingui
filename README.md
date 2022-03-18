@@ -13,7 +13,7 @@ Update with `conda env update -f https://raw.githubusercontent.com/bbo-lab/ACM-t
 ## Running
 1. Start Anaconda Prompt (Windows) / terminal (linux) and navigate into repository directory
 2. Switch to environment `conda activate bbo_acm-traingui`
-3. Run with `python -m ACM-traingui [options ...]`
+3. Run with `python -m ACMtraingui [options ...]`
 
 ## Options
 ### Assistant mode
