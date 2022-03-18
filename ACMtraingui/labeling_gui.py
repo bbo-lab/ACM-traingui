@@ -198,7 +198,7 @@ def load_cfg(path):
     print(path)
     print(configtxt)
     print("--")
-    datadir = os.path.dirname(os.path.abspath(path))+'/../../../data'
+    datadir = os.path.dirname(os.path.abspath(path)).replace('\', '/')+'/../../../data'
     cfg = eval(configtxt) # this is ugly since eval is used (make sure only trusted strings are evaluated)
     cfg_file.close()
     #sys.path.insert(0,os.path.dirname(path))
@@ -372,46 +372,44 @@ class MainWindow(QMainWindow):
         if not(self.master):
             # folder structure
             standardRecordingFolder_split = self.cfg['standardRecordingFolder'].split('/')
-            folder = self.drive + 'pose/user' + \
+            userfolder = self.drive + 'pose/user' + \
                      '/' + self.user
-            if not(os.path.isdir(folder)):
-                os.mkdir(folder)
-            folder = folder + \
+            if not(os.path.isdir(userfolder)):
+                os.makedirs(userfolder)
+                
+            resultsfolder = userfolder + \
                      '/' + standardRecordingFolder_split[-1]
-            if not(os.path.isdir(folder)):
-                os.mkdir(folder)
-#            folder = folder + \
-#                     '/' + self.cfg['standardRecordingFileNames'][self.i_cam].split('.ccv')[0]
-#            if not(os.path.isdir(folder)):
-#                os.mkdir(folder)
-            self.standardLabelsFolder = folder
+            if not(os.path.isdir(resultsfolder)):
+                os.makedirs(resultsfolder)
+
+            self.standardLabelsFolder = resultsfolder
             # backup
-            folder = self.standardLabelsFolder + '/' + 'backup'
-            if not(os.path.isdir(folder)):
-                os.mkdir(folder)
+            backupfolder = self.standardLabelsFolder + '/' + 'backup'
+            if not(os.path.isdir(backupfolder)):
+                os.mkdir(backupfolder)
             file = self.standardLabelsFolder + '/' + 'labeling_gui_cfg.py'
             if os.path.isfile(file):
                 cfg_old = load_cfg(file)
-                save_cfg(folder + '/' + 'labeling_gui_cfg.py', cfg_old)
+                save_cfg(backupfolder + '/' + 'labeling_gui_cfg.py', cfg_old)
             #file = self.standardLabelsFolder + '/' + 'labels.npy'
             file = self.standardLabelsFolder + '/' + 'labels.npz'
             if os.path.isfile(file):
                 #labels_old = np.load(file, allow_pickle=True).item()
                 labels_old = np.load(file, allow_pickle=True)['arr_0'].item()
-                #np.save(folder + '/' + 'labels.npy', labels_old)
-                np.savez(folder + '/' + 'labels.npz', labels_old)
+                #np.save(backupfolder + '/' + 'labels.npy', labels_old)
+                np.savez(backupfolder + '/' + 'labels.npz', labels_old)
             # autosave
-            folder = self.standardLabelsFolder + '/' + 'autosave'
-            if not(os.path.isdir(folder)):
-                os.mkdir(folder)
-            save_cfg(folder + '/' + 'labeling_gui_cfg.py', self.cfg)
+            autosavefolder = self.standardLabelsFolder + '/' + 'autosave'
+            if not(os.path.isdir(autosavefolder)):
+                os.makedirs(autosavefolder)
+            save_cfg(autosavefolder + '/' + 'labeling_gui_cfg.py', self.cfg)
             #file = self.standardLabelsFolder + '/' + 'labels.npy'
             file = self.standardLabelsFolder + '/' + 'labels.npz'
             if os.path.isfile(file):
                 #labels_save = np.load(file, allow_pickle=True).item()
                 labels_save = np.load(file, allow_pickle=True)['arr_0'].item()
-                #np.save(folder + '/' + 'labels.npy', labels_save)
-                np.savez(folder + '/' + 'labels.npz', labels_save)
+                #np.save(autosavefolder + '/' + 'labels.npy', labels_save)
+                ##np.savez(autosavefolder + '/' + 'labels.npz', labels_save)
             # save cfg-file
             save_cfg(self.standardLabelsFolder + '/' + 'labeling_gui_cfg.py', self.cfg)
             # last pose            

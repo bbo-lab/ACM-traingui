@@ -1,7 +1,6 @@
 {
-# FILES
+# FILES - WARNING: Filenames must NOT contain \ (not even from Python functions like os.dirname(__file__) on Windows)!
 'autoLoad': True,
-# ARENA 05:
 'standardModelFile': datadir+'/model/model.npy', # datadir translates to [currentfile]/../../../data
 'standardSketchFile': datadir+'/sketch/20210511_sketch_1_ds.npy',
 'standardRecordingFolder': datadir+'/ccv/M220217_DW01',
