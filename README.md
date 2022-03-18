@@ -8,7 +8,8 @@ GUI to label frames for training of ACM-dlcdetect, by Arne Monsees
 3. Create conda environment `conda env create -f https://raw.githubusercontent.com/bbo-lab/ACM-traingui/master/environment.yml`
 
 ## Update 
-Update with `conda env update -f https://raw.githubusercontent.com/bbo-lab/ACM-traingui/master/environment.yml --prune`.
+1. Start Anaconda Prompt (Windows) / terminal (linux) and navigate into repository directory
+2. Update with `conda env update -f https://raw.githubusercontent.com/bbo-lab/ACM-traingui/master/environment.yml --prune`.
 
 ## Running
 1. Start Anaconda Prompt (Windows) / terminal (linux) and navigate into repository directory
