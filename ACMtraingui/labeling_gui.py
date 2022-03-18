@@ -198,7 +198,7 @@ def load_cfg(path):
     print(path)
     print(configtxt)
     print("--")
-    datadir = os.path.dirname(os.path.abspath(path)).replace('\', '/')+'/../../../data'
+    datadir = os.path.dirname(os.path.abspath(path)).replace('\\\\', '/')+'/../../../data'
     cfg = eval(configtxt) # this is ugly since eval is used (make sure only trusted strings are evaluated)
     cfg_file.close()
     #sys.path.insert(0,os.path.dirname(path))
