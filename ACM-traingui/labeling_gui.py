@@ -192,10 +192,14 @@ def sort_label_sequence(seq):
     return seq_ordered
 
 def load_cfg(path):
-    cfg_file = open(path, 'r')
-    datadir = os.path.dirname(os.path.abspath(path))+'/../../../data'
-    cfg = eval(cfg_file.read()) # this is ugly since eval is used (make sure only trusted strings are evaluated)
-    cfg_file.close()
+    #This suddenly led to weird errors, quick replace
+    #cfg_file = open(path, 'r')
+    #datadir = os.path.dirname(os.path.abspath(path))+'/../../../data'
+    #cfg = eval(cfg_file.read()) # this is ugly since eval is used (make sure only trusted strings are evaluated)
+    #cfg_file.close()
+    sys.path.insert(0,os.path.dirname(path))
+    from labeling_gui_cfg import cfg
+    sys.path.remove(os.path.dirname(path))
     return cfg
     
 def save_cfg(path, cfg):
