@@ -31,7 +31,14 @@ Run with `python -m ACMtraingui [configdir] --master`.
 This starts a GUI in master mode. Only do this if you know what you are doing.
 
 ### Check mode
-Run with `python -m ACMtraingui [directory of labels.npz] --check [bbo_calibcam calibration npy] `.
+Run with 
+```
+python -m ACMtraingui [directory of labels.npz] --check [bbo_calibcam calibration npy] # to use specified npy or
+python -m ACMtraingui [directory of labels.npz] --check [labeling_gui_cfg.py folder] # to use standardCalibrationFile from labeling_gui_cfg.py or
+python -m ACMtraingui [directory of labels.npz] --check '-' # or
+python -m ACMtraingui [directory of labels.npz] --check # to use backup labeling_gui_cfg.py in labels.npy folder. (Will often fail due to different paths between checker und labeler, as relative pathes are resolved, here).
+```
+
 This gives sorted text output of 3d and reprojections errors. Reporjection errors above 5-10px usually indicate errors in labeling and respective frames have to be checked.
 
 ### Join mode
