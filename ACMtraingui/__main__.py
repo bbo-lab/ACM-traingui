@@ -8,18 +8,15 @@ def main():
     parser = argparse.ArgumentParser(description="ACM-traingui - Simple GUI to .")
     parser.add_argument('INPUT_PATH', type=str, help="Directory with detect job configuration")
     parser.add_argument('--labels', type=str, required=False, nargs='*', default=None, help="If given, merges labes.npz in given dirs into labels.npz file specified in INPUT_PATH config file")
-    parser.add_argument('--check', type=str, required=False, nargs=1, default=None, help="Prints sorted list of square errors for labels in INPUT_PATH/labels.npz, using specified camera calibration")
+    parser.add_argument('--check', type=str, required=False, nargs='?', default=None, const='-', help="Prints sorted list of square errors for labels in INPUT_PATH/labels.npz. Supply either calibration file, a path to a labeling_gui_cfg.py or '-'/nothing to load labeling_gui_cfg.py in directory of labels.npy")
     parser.add_argument('--master', required=False, action="store_true", help="Switches between master mode and worker mode")
 
     args = parser.parse_args()
     input_path = os.path.expanduser(args.INPUT_PATH)
-
-    # Load config
-    # TODO change config system, e.g. pass around a dictionary instead of importing the config everywhere, requiring the sys.path.insert
-    sys.path.insert(0,input_path)
     print(input_path)
-
     if args.labels is not None:
+        # Load config
+        sys.path.insert(0,input_path)
         import dlcdetectConfig as cfg
 
         if os.path.isfile(cfg.filePath_labels):
@@ -42,9 +39,20 @@ def main():
         print(f"{len(labels.keys())} frames labelled")
     elif args.check is not None:
         import calibcamlib
-        print(calibcamlib.__path__)
-        cs = calibcamlib.Camerasystem.from_calibcam_file(args.check[0])
-        labels = np.load(args.INPUT_PATH+"/labels.npz",allow_pickle=True)['arr_0'].item()
+
+        if args.check == '-':
+            from .config import load_cfg
+            cfg = load_cfg(input_path+'/labeling_gui_cfg.py') # This will load a copy, might fail since paths are replaced
+            calibfile = cfg['standardCalibrationFile']
+        elif os.path.isdir(args.check): # This is supposed to be filled with the config directory
+            from .config import load_cfg
+            cfg = load_cfg(args.check+'/labeling_gui_cfg.py')
+            calibfile = cfg['standardCalibrationFile']
+        else: # This is supposed to be filled with the path of the calib file
+            calibfile = args.check[0]
+
+        cs = calibcamlib.Camerasystem.from_calibcam_file(calibfile)
+        labels = np.load(input_path+"/labels.npz",allow_pickle=True)['arr_0'].item()
 
         frame = [];
         marker = [];
@@ -81,10 +89,10 @@ def main():
 
     elif args.master:
         from . import labeling_gui
-        labeling_gui.main(master=True,configFile=args.INPUT_PATH)
+        labeling_gui.main(master=True,configFile=input_path)
     else:
         from . import labeling_gui
-        labeling_gui.main(master=False,drive=args.INPUT_PATH)
+        labeling_gui.main(master=False,drive=input_path)
     return
 
 if __name__ == '__main__':

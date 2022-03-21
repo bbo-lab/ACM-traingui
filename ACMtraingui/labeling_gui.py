@@ -32,6 +32,8 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import imageio
 from ccvtools import rawio
 
+from .config import load_cfg,save_cfg
+
 def rodrigues2rotMat_single(r):
     theta = np.power(r[0]**2 + r[1]**2 + r[2]**2, 0.5)
     u = r / (theta + np.abs(np.sign(theta)) - 1.0)
@@ -192,28 +194,6 @@ def sort_label_sequence(seq):
     seq_ordered = labels_num_sorted + labels_left_sorted + labels_right_sorted
     return seq_ordered
 
-def load_cfg(path):
-    cfg_file = open(path, 'r')
-    configtxt = cfg_file.read()
-    datadir = os.path.dirname(os.path.abspath(path)).replace('\\\\', '/')+'/../../../data'
-    cfg = eval(configtxt) # this is ugly since eval is used (make sure only trusted strings are evaluated)
-    cfg_file.close()
-    #sys.path.insert(0,os.path.dirname(path))
-    #from labeling_gui_cfg import cfg
-    #sys.path.remove(os.path.dirname(path))
-    return cfg
-    
-def save_cfg(path, cfg):
-    file_cfg = open(path, 'w')
-    file_cfg.write('{\n')
-    for key in cfg.keys():
-        if isinstance(cfg[key], str):
-            file_cfg.write('\'' + key + '\'' + ': ' + '\'' + str(cfg[key]) + '\'' + ',\n')
-        else:
-            file_cfg.write('\'' + key + '\'' + ': ' + str(cfg[key]) + ',\n')          
-    file_cfg.write('}\n')
-    file_cfg.close()
-    return cfg
     
 class SelectUserWindow(QDialog):
     def __init__(self, parent=None, drive=[]):
