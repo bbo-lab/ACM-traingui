@@ -4,6 +4,7 @@ import copy
 import numpy as np
 import os
 import sys
+import calibcamlib
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QGuiApplication, QIntValidator
@@ -194,10 +195,6 @@ def sort_label_sequence(seq):
 def load_cfg(path):
     cfg_file = open(path, 'r')
     configtxt = cfg_file.read()
-    print("--")
-    print(path)
-    print(configtxt)
-    print("--")
     datadir = os.path.dirname(os.path.abspath(path)).replace('\\\\', '/')+'/../../../data'
     cfg = eval(configtxt) # this is ugly since eval is used (make sure only trusted strings are evaluated)
     cfg_file.close()
@@ -271,6 +268,7 @@ class SelectUserWindow(QDialog):
 class MainWindow(QMainWindow):   
     def __init__(self, parent=None, fileConfig=None, master=True, drive=None):
         self.master = master
+        self.cameraSystem = None
         
         if drive is None:
             self.drive = 'O:/analysis/'
@@ -318,7 +316,6 @@ class MainWindow(QMainWindow):
             self.button_reprojectionMode_press()
         if (self.cfg['button_sketchMode_activate']):
             self.button_sketchMode_press()
-
 
             
 
@@ -467,6 +464,7 @@ class MainWindow(QMainWindow):
 
             # load calibration
             if os.path.isfile(self.standardCalibrationFile):
+                self.cameraSystem = calibcamlib.Camerasystem.from_calibcam_file(self.standardCalibrationFile)
                 self.calibrationIsLoaded = True
                 self.origin = np.zeros(3, dtype=np.float64)
                 self.coord = np.identity(3, dtype=np.float64)
@@ -1107,9 +1105,28 @@ class MainWindow(QMainWindow):
             label_index = self.labels3d_sequence.index(selected_label_name)
             x = self.sketch_locations[label_index, 0]
             y = self.sketch_locations[label_index, 1]
-            # text
-            self.textSketch.set(text='Label {:02d}:\n{:s}'.format(label_index+1,
-                                                                  selected_label_name))
+
+            if self.cameraSystem is not None:
+                #self.labels2d[i_label][i_cam]
+                #self.selectedLabel2d[i_cam, 0]
+
+                labels2d = np.zeros(shape=(self.selectedLabel2d.shape[0],len(self.labels2d.keys()),2))
+                labels2d[:] = np.NaN
+                for i,m in enumerate(self.labels2d.keys()):
+                    labels2d[:,i,:] = self.labels2d[m][:,:]
+
+                (X,P,V) = self.cameraSystem.triangulate_3derr(labels2d)
+                sel_x = self.cameraSystem.project(X)
+                labelerr = np.sum((labels2d-sel_x)**2,axis=2)
+
+                (X,P,V) = self.cameraSystem.triangulate_3derr(self.selectedLabel2d[:,np.newaxis,:])
+                sel_x = self.cameraSystem.project(X)
+                sellabelerr = np.sum((self.selectedLabel2d[:,np.newaxis,:]-sel_x)**2,axis=2)
+
+                self.textSketch.set(text=f'Label {(label_index+1):02d}:\n{selected_label_name}\nLabel error: {np.nanmax(sellabelerr):6.1f}\nFrame error: {np.nanmax(labelerr):6.1f}')
+            else:
+                self.textSketch.set(text=f'Label {(label_index+1):02d}:\n{selected_label_name}')
+
             # labels
             for label_index in range(np.size(self.labels3d_sequence)):
                 color = 'orange'
@@ -1584,6 +1601,7 @@ class MainWindow(QMainWindow):
                                                   "npy files (*.npy)",
                                                   options=dialogOptions)
         if fileName:
+            self.cameraSystem = calibcamlib.Camerasystem.from_calibcam_file(fileName)
             self.result = np.load(fileName, allow_pickle=True).item()
             A_val = self.result['A_fit']
             self.A = np.zeros((self.nCameras, 3, 3), dtype=np.float64)
