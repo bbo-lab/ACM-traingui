@@ -1149,7 +1149,7 @@ class MainWindow(QMainWindow):
             self.axSketchZoom.invert_yaxis()
 
             self.canvasSketch.draw()
-            self.button_zoom_press()
+            self.button_zoom_press(tostate="off")
         
     # controls
     def set_controls(self):
@@ -2024,7 +2024,12 @@ class MainWindow(QMainWindow):
             self.canvas3d.draw()
         self.button_home.clearFocus()
             
-    def button_zoom_press(self):
+    def button_zoom_press(self,status=None,tostate=["on","off"]):
+        if self.toolbars_zoom_status and "off" not in tostate:
+            return
+        if not self.toolbars_zoom_status and "on" not in tostate:
+            return
+
         if (self.recordingIsLoaded):
             if (not(self.toolbars_zoom_status)):
                 self.button_zoom.setStyleSheet("background-color: green;")
