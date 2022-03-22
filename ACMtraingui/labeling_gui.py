@@ -1101,7 +1101,7 @@ class MainWindow(QMainWindow):
                 #self.labels2d[i_label][i_cam]
                 #self.selectedLabel2d[i_cam, 0]
 
-                labels2d = np.zeros(shape=(self.selectedLabel2d.shape[0],len(self.labels2d.keys()),2))
+                labels2d = np.zeros(shape=(self.selectedLabel2d.shape[0],len(self.labels2d.keys()),self.selectedLabel2d.shape[1]))
                 labels2d[:] = np.NaN
                 for i,m in enumerate(self.labels2d.keys()):
                     labels2d[:,i,:] = self.labels2d[m][:,:]
@@ -1149,7 +1149,7 @@ class MainWindow(QMainWindow):
             self.axSketchZoom.invert_yaxis()
 
             self.canvasSketch.draw()
-        
+            self.button_zoom_press()
         
     # controls
     def set_controls(self):
