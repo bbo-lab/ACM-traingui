@@ -283,7 +283,7 @@ class MainWindow(QMainWindow):
         self.set_layout()
         self.set_controls()
         self.plot2d_drawNormal_ini()
-        #self.plot3d_draw()
+        self.plot3d_draw()
 
         self.setFocus()
         self.setWindowTitle('Labeling GUI')
@@ -868,6 +868,7 @@ class MainWindow(QMainWindow):
         
     # 3d plot
     def plot3d_draw(self):
+        plot('plot3d_draw called')
         for i in reversed(range(self.views3d_layoutGrid.count())):
             widgetToRemove = self.views3d_layoutGrid.itemAt(i).widget()
             self.views3d_layoutGrid.removeWidget(widgetToRemove)

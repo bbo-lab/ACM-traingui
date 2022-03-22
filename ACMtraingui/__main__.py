@@ -2,12 +2,14 @@ import argparse
 import os
 import sys
 import numpy as np
+import re
 
 def main():
     # Parse inputs
     parser = argparse.ArgumentParser(description="ACM-traingui - Simple GUI to .")
     parser.add_argument('INPUT_PATH', type=str, help="Directory with detect job configuration")
     parser.add_argument('--labels', type=str, required=False, nargs='*', default=None, help="If given, merges labes.npz in given dirs into labels.npz file specified in INPUT_PATH config file")
+    parser.add_argument('--strict', required=False, action="store_true", help="With --labels, merges only frames where frames were labeled in all cameras")
     parser.add_argument('--check', type=str, required=False, nargs='?', default=None, const='-', help="Prints sorted list of square errors for labels in INPUT_PATH/labels.npz. Supply either calibration file, a path to a labeling_gui_cfg.py or '-'/nothing to load labeling_gui_cfg.py in directory of labels.npy")
     parser.add_argument('--master', required=False, action="store_true", help="Switches between master mode and worker mode")
 
@@ -25,14 +27,31 @@ def main():
             labels = dict()
 
         for labelsdir in args.labels:
-            print(labelsdir+"/labels.npz")
             try:
                 labels_new = np.load(labelsdir+"/labels.npz", allow_pickle=True)['arr_0'].item()
-                print(list(labels_new.keys()))
-                print()
-                labels = {**labels, **labels_new} # labels | labels_new # Python 3.9+
             except:
-                print("Error loading")
+                print(f"Error loading {labelsdir+"/labels.npz"}")
+
+            if args.strict:
+                delframes = []
+                for frameidx, labels_dict in labels_new.items():
+                    camnans = np.all(np.isnan(np.concatenate(list(labels_dict.values()),1)),axis=1)
+                    if np.any(camnans):
+                        delframes.append(frameidx)
+
+                for k in delframes:
+                        labels_new.pop(k, None)
+
+            userframes = list(labels_new.keys())
+
+            m = re.search('(?<=/pose/user/)[A-Za-z0-9_-]+',labelsdir)
+            print()
+            print(f'{m[0]}: {len(userframes)} - {userframes}')
+            if len(delframes)>0:
+                print(f'Not considering {len(delframes)} frames due to incomplete marking: {delframes}')
+
+            labels = {**labels, **labels_new} # labels | labels_new # Python 3.9+
+
 
         np.savez(cfg.filePath_labels, labels)
         print()
