@@ -1097,7 +1097,7 @@ class MainWindow(QMainWindow):
 
             sellabelerr = np.asarray([])
             labelerr = np.asarray([])
-            if self.cameraSystem is not None:
+            if self.cameraSystem is not None and len(self.labels2d.keys())>0:
                 #self.labels2d[i_label][i_cam]
                 #self.selectedLabel2d[i_cam, 0]
 
