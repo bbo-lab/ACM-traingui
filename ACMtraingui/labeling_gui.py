@@ -1665,7 +1665,7 @@ class MainWindow(QMainWindow):
             if 'labels3d' in self.model:
                 self.labels3d = copy.deepcopy(self.model['labels3d'])
                 self.labels3d_sequence = sorted(list(self.labels3d.keys()))
-#                 self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence) # FIXME: comment when you want to label origin/coord, uncomment if you want to actually label something          
+                self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence) # FIXME: comment when you want to label origin/coord, uncomment if you want to actually label something
             else:
                 self.labels3d = dict()
                 self.labels3d_sequence = list([])
