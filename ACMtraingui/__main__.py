@@ -30,7 +30,7 @@ def main():
             try:
                 labels_new = np.load(labelsdir+"/labels.npz", allow_pickle=True)['arr_0'].item()
             except:
-                print(f"Error loading {labelsdir+"/labels.npz"}")
+                print(f"Error loading {labelsdir+'/labels.npz'}")
 
             if args.strict:
                 delframes = []
