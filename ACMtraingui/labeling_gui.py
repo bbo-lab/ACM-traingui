@@ -34,6 +34,8 @@ from ccvtools import rawio
 
 from .config import load_cfg,save_cfg
 
+import warnings
+
 def rodrigues2rotMat_single(r):
     theta = np.power(r[0]**2 + r[1]**2 + r[2]**2, 0.5)
     u = r / (theta + np.abs(np.sign(theta)) - 1.0)
@@ -249,6 +251,7 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None, fileConfig=None, master=True, drive=None):
         self.master = master
         self.cameraSystem = None
+        self.label2d_max_err = []
         
         if drive is None:
             self.drive = 'O:/analysis/'
@@ -280,7 +283,7 @@ class MainWindow(QMainWindow):
         self.set_layout()
         self.set_controls()
         self.plot2d_drawNormal_ini()
-        self.plot3d_draw()
+        #self.plot3d_draw()
 
         self.setFocus()
         self.setWindowTitle('Labeling GUI')
@@ -929,8 +932,11 @@ class MainWindow(QMainWindow):
         self.ax3d.lines = list()
         for label3d_name in self.labels3d.keys():
             color = 'orange'
-            if label3d_name in self.labels2d.keys():
+            if label3d_name in self.label2d_max_err:
+                color = 'red'
+            elif label3d_name in self.labels2d.keys():
                 color = 'cyan'
+
             self.ax3d.plot([self.labels3d[label3d_name][0]],
                            [self.labels3d[label3d_name][1]],
                            [self.labels3d[label3d_name][2]],
@@ -1047,12 +1053,15 @@ class MainWindow(QMainWindow):
             color = 'orange'
             label_name = self.labels3d_sequence[label_index]
             if label_name in self.labels2d:
-                if (self.button_fastLabelingMode_status):
+                if label_name in self.label2d_max_err:
+                    color = 'red'
+                elif (self.button_fastLabelingMode_status):
                     if np.all(np.logical_not(np.isnan(self.labels2d[label_name][self.i_cam]))):
                         color = 'cyan'
                 else:
                     if np.any(np.logical_not(np.isnan(self.labels2d[label_name]))):
                         color = 'cyan'
+
             label_location = self.sketch_locations[label_index]
             sketch_labels = self.axSketch.plot([label_location[0]],
                                                [label_location[1]],
@@ -1086,6 +1095,8 @@ class MainWindow(QMainWindow):
             x = self.sketch_locations[label_index, 0]
             y = self.sketch_locations[label_index, 1]
 
+            sellabelerr = np.asarray([])
+            labelerr = np.asarray([])
             if self.cameraSystem is not None:
                 #self.labels2d[i_label][i_cam]
                 #self.selectedLabel2d[i_cam, 0]
@@ -1103,16 +1114,23 @@ class MainWindow(QMainWindow):
                 sel_x = self.cameraSystem.project(X)
                 sellabelerr = np.sum((self.selectedLabel2d[:,np.newaxis,:]-sel_x)**2,axis=2)
 
-                self.textSketch.set(text=f'Label {(label_index+1):02d}:\n{selected_label_name}\nLabel error: {np.nanmax(sellabelerr):6.1f}\nFrame error: {np.nanmax(labelerr):6.1f}')
-            else:
-                self.textSketch.set(text=f'Label {(label_index+1):02d}:\n{selected_label_name}')
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+
+                if not sellabelerr.size == 0 and not labelerr.size == 0:
+                    self.textSketch.set(text=f'Label {(label_index+1):02d}:\n{selected_label_name}\nLabel error: {np.nanmax(sellabelerr):6.1f}\nFrame error: {np.nanmax(labelerr):6.1f}')
+                    self.label2d_max_err = np.asarray(list(self.labels2d.keys()))[np.nanmax(labelerr)==np.nanmax(labelerr,axis=0)]
+                else:
+                    self.textSketch.set(text=f'Label {(label_index+1):02d}:\n{selected_label_name}')
 
             # labels
             for label_index in range(np.size(self.labels3d_sequence)):
                 color = 'orange'
                 label_name = self.labels3d_sequence[label_index]
                 if label_name in self.labels2d:
-                    if (self.button_fastLabelingMode_status):
+                    if label_name in self.label2d_max_err:
+                        color = 'red'
+                    elif (self.button_fastLabelingMode_status):
                         if np.all(np.logical_not(np.isnan(self.labels2d[label_name][self.i_cam]))):
                             color = 'cyan'
                     else:
