@@ -63,7 +63,6 @@ def main():
         print(f"{len(labels.keys())} frames labelled")
     elif args.check is not None:
         import calibcamlib
-
         if args.check == '-':
             from .config import load_cfg
             cfg = load_cfg(input_path+'/labeling_gui_cfg.py') # This will load a copy, might fail since paths are replaced
@@ -73,7 +72,8 @@ def main():
             cfg = load_cfg(args.check+'/labeling_gui_cfg.py')
             calibfile = cfg['standardCalibrationFile']
         else: # This is supposed to be filled with the path of the calib file
-            calibfile = args.check[0]
+            calibfile = args.check
+        print(calibfile)
 
         cs = calibcamlib.Camerasystem.from_calibcam_file(calibfile)
         labels = np.load(input_path+"/labels.npz",allow_pickle=True)['arr_0'].item()
