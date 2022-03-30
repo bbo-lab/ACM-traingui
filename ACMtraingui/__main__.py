@@ -18,11 +18,15 @@ def main():
     print(input_path)
     if args.labels is not None:
         # Load config
-        sys.path.insert(0,input_path)
-        import dlcdetectConfig as cfg
+        if os.path.isdir(input_path):
+            sys.path.insert(0,input_path)
+            import dlcdetectConfig as cfg
+            labels_file = cfg.filePath_labels
+        else:
+            labels_file = input_path
 
-        if os.path.isfile(cfg.filePath_labels):
-            labels = np.load(cfg.filePath_labels, allow_pickle=True)['arr_0'].item()
+        if os.path.isfile(labels_file):
+            labels = np.load(labels_file, allow_pickle=True)['arr_0'].item()
         else:
             labels = dict()
 
@@ -54,12 +58,11 @@ def main():
             labels = {**labels, **labels_new} # labels | labels_new # Python 3.9+
 
 
-        np.savez(cfg.filePath_labels, labels)
+        np.savez(labels_file, labels)
         print()
         print(f"{len(labels.keys())} frames labelled")
     elif args.check is not None:
         import calibcamlib
-
         if args.check == '-':
             from .config import load_cfg
             cfg = load_cfg(input_path+'/labeling_gui_cfg.py') # This will load a copy, might fail since paths are replaced
@@ -69,7 +72,8 @@ def main():
             cfg = load_cfg(args.check+'/labeling_gui_cfg.py')
             calibfile = cfg['standardCalibrationFile']
         else: # This is supposed to be filled with the path of the calib file
-            calibfile = args.check[0]
+            calibfile = args.check
+        print(calibfile)
 
         cs = calibcamlib.Camerasystem.from_calibcam_file(calibfile)
         labels = np.load(input_path+"/labels.npz",allow_pickle=True)['arr_0'].item()

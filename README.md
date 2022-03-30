@@ -3,6 +3,7 @@
 GUI to label frames for training of ACM-dlcdetect, by Arne Monsees
 
 ## Installation
+(You do not need to clone this repository.)
 1. [Install Anaconda](https://docs.anaconda.com/anaconda/install/)
 2. Start Anaconda Prompt (Windows) / terminal (linux) and navigate into repository directory
 3. Create conda environment `conda env create -f https://raw.githubusercontent.com/bbo-lab/ACM-traingui/master/environment.yml`
@@ -42,8 +43,10 @@ python -m ACMtraingui [directory of labels.npz] --check # to use backup labeling
 This gives sorted text output of 3d and reprojections errors. Reporjection errors above 5-10px usually indicate errors in labeling and respective frames have to be checked.
 
 ### Join mode
-Run with `python -m ACMtraingui [configdir of ACM-dlcdetect] --check [multiple directories containing labels.npz files] `.
+Run with `python -m ACMtraingui [configdir of ACM-dlcdetect] --check [multiple directories containing labels.npz files] [--strict]`.
 This joins all marked labels in the labels.npz files into the labels.npz file in the dlcdetect configuration. Marked labels overwrite existing labels framewise.
+
+```--strict``` only merges frames where all cameras have marked points.
 
 
 ## TODO

@@ -444,7 +444,7 @@ class MainWindow(QMainWindow):
                     self.yLim_prev[i_cam] = np.array([0.0, self.yRes[i_cam] - 1], dtype=np.float64)
                 self.maxPose = int(np.min([np.min(self.nPoses) - 1, self.cfg['maxPose']]))
             else:
-                print('WARNING: Autoloading failed. Recording files do not exist.')
+                print(f'WARNING: Autoloading failed. Recording files do not exist: {self.recFileNames}')
 
             # load calibration
             if os.path.isfile(self.standardCalibrationFile):
@@ -492,7 +492,7 @@ class MainWindow(QMainWindow):
                 if 'labels3d' in self.model:
                     self.labels3d = copy.deepcopy(self.model['labels3d'])
                     self.labels3d_sequence = sorted(list(self.labels3d.keys()))
-#                     self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence) # FIXME: comment when you want to label origin/coord, uncomment if you want to actually label something  
+                    self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence) # FIXME: comment when you want to label origin/coord, uncomment if you want to actually label something
                 else:
                     self.labels3d = dict()
                     self.labels3d_sequence = list([])
@@ -1667,7 +1667,7 @@ class MainWindow(QMainWindow):
             if 'labels3d' in self.model:
                 self.labels3d = copy.deepcopy(self.model['labels3d'])
                 self.labels3d_sequence = sorted(list(self.labels3d.keys()))
-#                 self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence) # FIXME: comment when you want to label origin/coord, uncomment if you want to actually label something          
+                self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence) # FIXME: comment when you want to label origin/coord, uncomment if you want to actually label something
             else:
                 self.labels3d = dict()
                 self.labels3d_sequence = list([])
