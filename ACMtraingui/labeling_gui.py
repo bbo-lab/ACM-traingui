@@ -2360,11 +2360,30 @@ class MainWindow(QMainWindow):
             elif (self.cfg['button_saveLabels'] and event.key() == Qt.Key_S):
                 self.button_saveLabels_press()
             elif (self.cfg['field_vmax'] and event.key() == Qt.Key_Plus):
-                self.field_vmax.setText(str(int(self.vmax + 5)))
+                self.field_vmax.setText(str(int(self.vmax*0.8)))
                 self.field_vmax_change()
             elif (self.cfg['field_vmax'] and event.key() == Qt.Key_Minus):
-                self.field_vmax.setText(str(int(self.vmax - 5)))
+                self.field_vmax.setText(str(int(self.vmax/0.8)))
                 self.field_vmax_change()
+            elif event.key() == Qt.Key_1:
+                if self.nCameras>0:
+                    self.list_fastLabelingMode.setCurrentIndex(0)
+            elif event.key() == Qt.Key_2:
+                if self.nCameras>1:
+                    self.list_fastLabelingMode.setCurrentIndex(1)
+            elif event.key() == Qt.Key_3:
+                if self.nCameras>2:
+                    self.list_fastLabelingMode.setCurrentIndex(2)
+            elif event.key() == Qt.Key_4:
+                if self.nCameras>3:
+                    self.list_fastLabelingMode.setCurrentIndex(3)
+            elif event.key() == Qt.Key_5:
+                if self.nCameras>4:
+                    self.list_fastLabelingMode.setCurrentIndex(4)
+            elif event.key() == Qt.Key_6:
+                if self.nCameras>5:
+                    self.list_fastLabelingMode.setCurrentIndex(5)
+                
         else:
             print('WARNING: Auto-repeat is not supported')
 
