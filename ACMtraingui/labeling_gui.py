@@ -443,7 +443,7 @@ class MainWindow(QMainWindow):
                     self.yLim_prev[i_cam] = np.array([0.0, self.yRes[i_cam] - 1], dtype=np.float64)
                 self.maxPose = int(np.min([np.min(self.nPoses) - 1, self.cfg['maxPose']]))
             else:
-                print('WARNING: Autoloading failed. Recording files do not exist.')
+                print(f'WARNING: Autoloading failed. Recording files do not exist: {self.recFileNames}')
 
             # load calibration
             if os.path.isfile(self.standardCalibrationFile):
