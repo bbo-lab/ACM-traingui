@@ -6,8 +6,9 @@ import os
 import sys
 import calibcamlib
 
+from PyQt5 import QtCore
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QGuiApplication, QIntValidator
+from PyQt5.QtGui import QGuiApplication, QIntValidator, QCursor
 from PyQt5.QtWidgets import QAbstractItemView, \
                             QApplication, \
                             QComboBox, \
@@ -21,7 +22,7 @@ from PyQt5.QtWidgets import QAbstractItemView, \
                             QMainWindow, \
                             QPushButton, \
                             QSizePolicy
-                            
+            
 from matplotlib import colors as mcolors
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
@@ -750,6 +751,7 @@ class MainWindow(QMainWindow):
         self.h_imgs = list()
 #         self.h_titles = list()
         self.toolbars = list()
+        self.frame_views2d.setCursor(QCursor(QtCore.Qt.CrossCursor))
         for i_cam in range(self.nCameras):   
                 frame = QFrame()
                 frame.setParent(self.frame_views2d)
