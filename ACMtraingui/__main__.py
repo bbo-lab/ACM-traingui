@@ -55,7 +55,7 @@ def main():
             if len(delframes)>0:
                 print(f'Not considering {len(delframes)} frames due to incomplete marking: {delframes}')
 
-            labels = {**labels, **labels_new} # labels | labels_new # Python 3.9+
+            labels = {**labels_new, **labels} # labels_new | labels # Python 3.9+
 
 
         np.savez(labels_file, labels)
