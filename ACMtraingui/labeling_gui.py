@@ -144,58 +144,61 @@ def calc_udst(m_dst, k):
 
 # ATTENTION: hard coded
 def sort_label_sequence(seq):
-    num_order = list(['tail', 'spine', 'head'])
-    left_right_order = list(['shoulder', 'elbow', 'wrist', 'paw_front', 'finger',
-                             'side',
-                             'hip', 'knee', 'ankle', 'paw_hind', 'toe'])
-    #
-    labels_num = list()
-    labels_left = list()
-    labels_right = list()
-    for label in seq:
-        label_split = label.split('_')
-        if 'right' in label_split:
-            labels_right.append(label)
-        elif 'left' in label_split:
-            labels_left.append(label)
-        else:
-            labels_num.append(label)
-    labels_num = sorted(labels_num)
-    labels_left = sorted(labels_left)
-    labels_right = sorted(labels_right)
-    #
-    labels_num_sorted = list([[] for i in num_order])
-    labels_left_sorted = list([[] for i in left_right_order])
-    labels_right_sorted = list([[] for i in left_right_order])
-    for label in labels_num:
-        label_split = label.split('_')
-        label_use = '_'.join(label_split[1:-1])
-        index = num_order.index(label_use)
-        labels_num_sorted[index].append(label)
-    labels_num_sorted = list([i for j in labels_num_sorted for i in j])
-    for label in labels_left:
-        label_split = label.split('_')
-        label_use = '_'.join(label_split[1:-1])
-        label_use_split = label_use.split('_')
-        if 'left' in label_use_split:
-            label_use_split.remove('left')
-        label_use = '_'.join(label_use_split)
-        index = left_right_order.index(label_use)
-        labels_left_sorted[index].append(label)
-    labels_left_sorted = list([i for j in labels_left_sorted for i in j])
-    for label in labels_right:
-        label_split = label.split('_')
-        label_use = '_'.join(label_split[1:-1])
-        label_use_split = label_use.split('_')
-        if 'right' in label_use_split:
-            label_use_split.remove('right')
-        label_use = '_'.join(label_use_split)
-        index = left_right_order.index(label_use)
-        labels_right_sorted[index].append(label)
-    labels_right_sorted = list([i for j in labels_right_sorted for i in j])                
-    #
-    seq_ordered = labels_num_sorted + labels_left_sorted + labels_right_sorted
-    return seq_ordered
+    try:
+        num_order = list(['tail', 'spine', 'head'])
+        left_right_order = list(['shoulder', 'elbow', 'wrist', 'paw_front', 'finger',
+                                'side',
+                                'hip', 'knee', 'ankle', 'paw_hind', 'toe'])
+        #
+        labels_num = list()
+        labels_left = list()
+        labels_right = list()
+        for label in seq:
+            label_split = label.split('_')
+            if 'right' in label_split:
+                labels_right.append(label)
+            elif 'left' in label_split:
+                labels_left.append(label)
+            else:
+                labels_num.append(label)
+        labels_num = sorted(labels_num)
+        labels_left = sorted(labels_left)
+        labels_right = sorted(labels_right)
+        #
+        labels_num_sorted = list([[] for i in num_order])
+        labels_left_sorted = list([[] for i in left_right_order])
+        labels_right_sorted = list([[] for i in left_right_order])
+        for label in labels_num:
+            label_split = label.split('_')
+            label_use = '_'.join(label_split[1:-1])
+            index = num_order.index(label_use)
+            labels_num_sorted[index].append(label)
+        labels_num_sorted = list([i for j in labels_num_sorted for i in j])
+        for label in labels_left:
+            label_split = label.split('_')
+            label_use = '_'.join(label_split[1:-1])
+            label_use_split = label_use.split('_')
+            if 'left' in label_use_split:
+                label_use_split.remove('left')
+            label_use = '_'.join(label_use_split)
+            index = left_right_order.index(label_use)
+            labels_left_sorted[index].append(label)
+        labels_left_sorted = list([i for j in labels_left_sorted for i in j])
+        for label in labels_right:
+            label_split = label.split('_')
+            label_use = '_'.join(label_split[1:-1])
+            label_use_split = label_use.split('_')
+            if 'right' in label_use_split:
+                label_use_split.remove('right')
+            label_use = '_'.join(label_use_split)
+            index = left_right_order.index(label_use)
+            labels_right_sorted[index].append(label)
+        labels_right_sorted = list([i for j in labels_right_sorted for i in j])
+        #
+        seq_ordered = labels_num_sorted + labels_left_sorted + labels_right_sorted
+        return seq_ordered
+    except:
+        return seq
 
     
 class SelectUserWindow(QDialog):
@@ -507,7 +510,7 @@ class MainWindow(QMainWindow):
                 self.sketch = self.sketchFile['sketch']
                 self.sketch_annotation = self.sketchFile['sketch_label_locations']
                 self.sketch_locations = list()
-                for i_label in self.labels3d_sequence:
+                for i_label in self.sketch_annotation:
                     self.sketch_locations.append(self.sketch_annotation[i_label])
                 self.sketch_locations = np.array(self.sketch_locations, dtype=np.float64)
             else:
@@ -883,47 +886,50 @@ class MainWindow(QMainWindow):
         self.ax3d.grid(False)
 
         if (self.modelIsLoaded):
-            # FIXME: xyz should be already in the dictonary
-            nPoly = np.size(self.f, 0)
-            xyz = np.zeros((3, 3), dtype=np.float64)
-            xyz_all = np.zeros((nPoly, 3, 3), dtype=np.float64)
-            for i in range(nPoly):
-                f_use = self.f[i, :, 0]
-                xyz[0, :] = self.v[f_use[0] - 1]
-                xyz[1, :] = self.v[f_use[1] - 1]
-                xyz[2, :] = self.v[f_use[2] - 1]
-                xyz_all[i] = xyz
-            
-            self.surfModel3d = Poly3DCollection(xyz_all)
-            self.surfModel3d.set_alpha(0.1)
-            self.surfModel3d.set_edgecolor('black')
-            self.surfModel3d.set_facecolor('gray')
-            
-            self.ax3d.add_collection3d(self.surfModel3d)
-            
-            #self.ax3d.set_aspect('equal')
-            
-            self.ax3d.set_xlim([self.v_center[0] - self.dxyz_lim,
-                                self.v_center[0] + self.dxyz_lim])
-            self.ax3d.set_ylim([self.v_center[1] - self.dxyz_lim,
-                                self.v_center[1] + self.dxyz_lim])
-            self.ax3d.set_zlim([self.v_center[2] - self.dxyz_lim,
-                                self.v_center[2] + self.dxyz_lim])
-            
-    #        self.ax3d.dist = 9.25
-                
-#            self.ax3d.set_xlabel('x')
-#            self.ax3d.set_ylabel('y')
-#            self.ax3d.set_zlabel('z')
-#            # it is important to hide the ticks separately like this
-#            # if done otherwise, self.ax3d.format_coord() does not work
-#            for x_label in self.ax3d.xaxis.get_ticklabels():
-#                x_label.set_visible(False)
-#            for y_label in self.ax3d.yaxis.get_ticklabels():
-#                y_label.set_visible(False)
-#            for z_label in self.ax3d.zaxis.get_ticklabels():
-#                z_label.set_visible(False)
-            self.ax3d.set_axis_off()
+            try:
+                # FIXME: xyz should be already in the dictonary
+                nPoly = np.size(self.f, 0)
+                xyz = np.zeros((3, 3), dtype=np.float64)
+                xyz_all = np.zeros((nPoly, 3, 3), dtype=np.float64)
+                for i in range(nPoly):
+                    f_use = self.f[i, :, 0]
+                    xyz[0, :] = self.v[f_use[0] - 1]
+                    xyz[1, :] = self.v[f_use[1] - 1]
+                    xyz[2, :] = self.v[f_use[2] - 1]
+                    xyz_all[i] = xyz
+
+                self.surfModel3d = Poly3DCollection(xyz_all)
+                self.surfModel3d.set_alpha(0.1)
+                self.surfModel3d.set_edgecolor('black')
+                self.surfModel3d.set_facecolor('gray')
+
+                self.ax3d.add_collection3d(self.surfModel3d)
+
+                #self.ax3d.set_aspect('equal')
+
+                self.ax3d.set_xlim([self.v_center[0] - self.dxyz_lim,
+                                    self.v_center[0] + self.dxyz_lim])
+                self.ax3d.set_ylim([self.v_center[1] - self.dxyz_lim,
+                                    self.v_center[1] + self.dxyz_lim])
+                self.ax3d.set_zlim([self.v_center[2] - self.dxyz_lim,
+                                    self.v_center[2] + self.dxyz_lim])
+
+        #        self.ax3d.dist = 9.25
+
+        #            self.ax3d.set_xlabel('x')
+        #            self.ax3d.set_ylabel('y')
+        #            self.ax3d.set_zlabel('z')
+        #            # it is important to hide the ticks separately like this
+        #            # if done otherwise, self.ax3d.format_coord() does not work
+        #            for x_label in self.ax3d.xaxis.get_ticklabels():
+        #                x_label.set_visible(False)
+        #            for y_label in self.ax3d.yaxis.get_ticklabels():
+        #                y_label.set_visible(False)
+        #            for z_label in self.ax3d.zaxis.get_ticklabels():
+        #                z_label.set_visible(False)
+                self.ax3d.set_axis_off()
+            except:
+                pass
     
         self.plot3d_update()
 #        self.fig3d.tight_layout()
@@ -1785,22 +1791,23 @@ class MainWindow(QMainWindow):
     def button_sketchMode_press(self):
         if (self.button_fastLabelingMode):
             if (self.modelIsLoaded):
-                if (self.sketchIsLoaded):
-                    if (self.button_sketchMode_status):
-                        self.button_sketchMode.setStyleSheet("background-color: darkred;")
-                        self.button_sketchMode_status = not(self.button_sketchMode_status)
-                        self.plot3d_draw()
-                        self.figSketch.canvas.mpl_disconnect(self.cidSketch)
-                    else:
-                        self.button_sketchMode.setStyleSheet("background-color: green;")
-                        self.button_sketchMode_status = not(self.button_sketchMode_status)
-                        self.sketch_draw()
-                        self.cidSketch = self.canvasSketch.mpl_connect('button_press_event',
-                                                                       lambda event: self.sketch_click(event))
+                if (self.button_sketchMode_status):
+                    self.button_sketchMode.setStyleSheet("background-color: darkred;")
+                    self.button_sketchMode_status = not(self.button_sketchMode_status)
+                    self.plot3d_draw()
+                    self.figSketch.canvas.mpl_disconnect(self.cidSketch)
                 else:
-                    print('WARNING: Sketch needs to be loaded first')
+                    print('WARNING: Model needs to be loaded first')
+            elif (self.sketchIsLoaded):
+                if True:
+
+                    self.button_sketchMode.setStyleSheet("background-color: green;")
+                    self.button_sketchMode_status = not(self.button_sketchMode_status)
+                    self.sketch_draw()
+                    self.cidSketch = self.canvasSketch.mpl_connect('button_press_event',
+                                                                    lambda event: self.sketch_click(event))
             else:
-                print('WARNING: Model needs to be loaded first')
+                print('WARNING: Sketch or model needs to be loaded first')
         else:
             print('WARNING: "Fast Labeling Mode" needs to be enabled to activate "Sketch Mode"')
         self.button_sketchMode.clearFocus()
