@@ -1,25 +1,21 @@
-import os
+from pathlib import Path
+import os  # Required for eval below :(
 
 def load_cfg(path):
-    cfg_file = open(path, 'r')
-    configtxt = cfg_file.read()
-    datadir = os.path.dirname(os.path.abspath(path)).replace('\\\\', '/')+'/../../../data'
-    cfg = eval(configtxt) # this is ugly since eval is used (make sure only trusted strings are evaluated)
-    cfg_file.close()
-    #sys.path.insert(0,os.path.dirname(path))
-    #from labeling_gui_cfg import cfg
-    #sys.path.remove(os.path.dirname(path))
+    with open(path, 'r') as cfg_file:
+        configtxt = cfg_file.read()
+        cfg = eval(configtxt)  # this is ugly since eval is used (make sure only trusted strings are evaluated)
     return cfg
 
 
-def save_cfg(path, cfg):
-    file_cfg = open(path, 'w')
-    file_cfg.write('{\n')
-    for key in cfg.keys():
-        if isinstance(cfg[key], str):
-            file_cfg.write('\'' + key + '\'' + ': ' + '\'' + str(cfg[key]) + '\'' + ',\n')
-        else:
-            file_cfg.write('\'' + key + '\'' + ': ' + str(cfg[key]) + ',\n')
-    file_cfg.write('}\n')
-    file_cfg.close()
+def save_cfg(path: Path, cfg):
+    with open(path, 'w') as file_cfg:
+        file_cfg.write('{\n')
+        for key in cfg.keys():
+            if isinstance(cfg[key], str):
+                line = f"  '{key}': '{cfg[key]}',\n"
+            else:
+                line = f"  '{key}': {cfg[key]},\n"
+            file_cfg.write(line)
+        file_cfg.write('}\n')
     return cfg
