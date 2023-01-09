@@ -96,9 +96,9 @@ def read_video_meta(reader):
         header['sensorsize'] = tuple(header['sensor']['size'])
     else:
         print("Infering sensor size from image and setting offset to 0!")
-        header['sensorsize'] = tuple(reader.get_data(0).shape[0:2])
+        header['sensorsize'] = (reader.get_data(0).shape[1], reader.get_data(0).shape[0], reader.get_data(0).shape[2])
         header['offset'] = tuple(np.asarray([0, 0]))
-        
+            
     return header 
 
 # look at: Rational Radial Distortion Models with Analytical Undistortion Formulae, Lili Ma et al.
