@@ -513,6 +513,11 @@ class MainWindow(QMainWindow):
                 for i_label in self.sketch_annotation:
                     self.sketch_locations.append(self.sketch_annotation[i_label])
                 self.sketch_locations = np.array(self.sketch_locations, dtype=np.float64)
+                
+                if not hasattr(self, 'labels3d_sequence'):
+                    self.labels3d = copy.deepcopy(self.sketchFile['sketch_label_locations'])
+                    self.labels3d_sequence = sorted(list(self.labels3d.keys()))
+                    self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence) # FIXME: comment when you want to label origin/coord, uncomment if you want to actually label something
             else:
                 print(f'WARNING: Autoloading failed. Sketch file {self.standardSketchFile} does not exist.')
 
@@ -937,30 +942,33 @@ class MainWindow(QMainWindow):
         self.views3d_layoutGrid.addWidget(self.canvas3d)
     
     def plot3d_update(self):
-        self.ax3d.lines = list()
-        for label3d_name in self.labels3d.keys():
-            color = 'orange'
-            if label3d_name in self.label2d_max_err:
-                color = 'red'
-            elif label3d_name in self.labels2d.keys():
-                color = 'cyan'
+        try:
+            self.ax3d.lines = list()
+            for label3d_name in self.labels3d.keys():
+                color = 'orange'
+                if label3d_name in self.label2d_max_err:
+                    color = 'red'
+                elif label3d_name in self.labels2d.keys():
+                    color = 'cyan'
 
-            self.ax3d.plot([self.labels3d[label3d_name][0]],
-                           [self.labels3d[label3d_name][1]],
-                           [self.labels3d[label3d_name][2]],
+                self.ax3d.plot([self.labels3d[label3d_name][0]],
+                            [self.labels3d[label3d_name][1]],
+                            [self.labels3d[label3d_name][2]],
+                                marker='o',
+                                color=color,
+                                markersize=4,
+                                zorder=2)
+    #        if (self.label3d_select_status):
+            self.ax3d.plot([self.selectedLabel3d[0]],
+                        [self.selectedLabel3d[1]],
+                        [self.selectedLabel3d[2]],
                             marker='o',
-                            color=color,
-                            markersize=4,
-                            zorder=2)
-#        if (self.label3d_select_status):
-        self.ax3d.plot([self.selectedLabel3d[0]],
-                       [self.selectedLabel3d[1]],
-                       [self.selectedLabel3d[2]],
-                        marker='o',
-                        color='darkgreen',
-                        markersize=6,
-                        zorder=3)
-        self.canvas3d.draw()
+                            color='darkgreen',
+                            markersize=6,
+                            zorder=3)
+            self.canvas3d.draw()
+        except:
+            pass
         
     # sketch
     def sketch_draw(self):
