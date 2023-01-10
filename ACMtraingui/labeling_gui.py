@@ -834,7 +834,7 @@ class MainWindow(QMainWindow):
         if self.cfg['invert_yaxis']:
             ax.invert_yaxis()
         if self.cameras[i_cam]["rotate"]:
-            ax.invert_xaxis()
+            ax.invert_xaxis()  # Does calling this twice flip back?
             ax.invert_yaxis()
 
         self.fig2d[i_cam].canvas.draw()
@@ -1630,14 +1630,6 @@ class MainWindow(QMainWindow):
         label_d_frame.setText('dFrame:')
         controls_layout_grid.addWidget(label_d_frame, row, col)
         controls['general']['label_d_frame'] = label_d_frame
-        col = col + 1
-
-        button_zoom = QPushButton('Zoom (Z)')
-        button_zoom.setStyleSheet("background-color: darkred;")
-        button_zoom.clicked.connect(self.button_zoom_press)
-        controls_layout_grid.addWidget(button_zoom, row, col)
-        button_zoom.setEnabled(self.cfg['button_zoom'])
-        controls['general']['button_zoom'] = button_zoom
         row = row + 1
         col = 0
 
@@ -1657,6 +1649,15 @@ class MainWindow(QMainWindow):
         controls_layout_grid.addWidget(field_d_frame, row, col)
         field_d_frame.setEnabled(self.cfg['field_dFrame'])
         controls['general']['field_d_frame'] = field_d_frame
+        row = row + 1
+        col = 0
+
+        button_zoom = QPushButton('Zoom (Z)')
+        button_zoom.setStyleSheet("background-color: darkred;")
+        button_zoom.clicked.connect(self.button_zoom_press)
+        controls_layout_grid.addWidget(button_zoom, row, col)
+        button_zoom.setEnabled(self.cfg['button_zoom'])
+        controls['general']['button_zoom'] = button_zoom
         col = col + 1
 
         button_pan = QPushButton('Pan (W)')
@@ -1664,6 +1665,12 @@ class MainWindow(QMainWindow):
         button_pan.clicked.connect(self.button_pan_press)
         controls_layout_grid.addWidget(button_pan, row, col)
         controls['general']['button_pan'] = button_pan
+        col = col + 1
+
+        button_rotate = QPushButton('Rotate (R)')
+        button_rotate.clicked.connect(self.button_rotate_press)
+        controls_layout_grid.addWidget(button_rotate, row, col)
+        controls['general']['button_rotate'] = button_rotate
 
         self.frame_controls.setLayout(controls_layout_grid)
 
@@ -2126,6 +2133,18 @@ class MainWindow(QMainWindow):
             print('WARNING: Recording needs to be loaded first')
         self.controls['general']['button_zoom'].clearFocus()
 
+    def button_rotate_press(self):
+        if self.recordingIsLoaded:
+            self.cameras[self.i_cam]["rotate"] = not self.cameras[self.i_cam]["rotate"]
+
+            if self.controls['status']['button_fastLabelingMode']:
+                self.plot2d_draw_fast()
+            else:
+                self.plot2d_draw_normal()
+        else:
+            print('WARNING: Recording needs to be loaded first')
+        self.controls['general']['button_pan'].clearFocus()
+
     def button_pan_press(self):
         if self.recordingIsLoaded:
             if not self.controls['status']['toolbars_pan']:
@@ -2427,6 +2446,8 @@ class MainWindow(QMainWindow):
                 self.button_zoom_press()
             elif self.cfg['button_pan'] and event.key() == Qt.Key_W:
                 self.button_pan_press()
+            elif self.cfg['button_pan'] and event.key() == Qt.Key_R:
+                self.button_rotate_press()
             elif self.cfg['button_label3d'] and event.key() == Qt.Key_L:
                 self.button_label3d_press()
             elif self.cfg['button_up'] and event.key() == Qt.Key_Up:
