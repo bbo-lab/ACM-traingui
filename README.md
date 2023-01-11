@@ -50,12 +50,12 @@ This joins all marked labels in the labels.npz files into the labels.npz file in
 
 ### Compile to exe
 1. `conda activate bbo_acm-traingui`.
-2. Remove mkl: `conda install -c conda-forge nomkl`.
-3. Install py2exe: `conda install py2exe.
-4. If present, empty dist/ dirctory.
-5. `python setup_py2exe.py py2exe`.
-6. Copy `platforms` directory from `$HOME\.conda\envs\bbo_acm-traingui\Library\plugins` into `dist/`.
-7. Rename `dist` folder to `acm-traingui_standalone` and distribute.
+2. Install pyinstaller: `pip install pyinstaller.
+3. If present, empty dist/ dirctory.
+4. `pyinstaller --onefile traingui.py`.
+5. Distribute exe file in dist/ folder.
+
+Note: It might be necessary to remove mkl: `conda install -c conda-forge nomkl`.
 
 
 ## TODO
