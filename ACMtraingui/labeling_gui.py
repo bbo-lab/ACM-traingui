@@ -495,7 +495,7 @@ class MainWindow(QMainWindow):
             print(f'WARNING: Autoloading failed. 3D model file {model_file} does not exist.')
 
     def get_model_v_f_vc(self):
-        return self.model['v'], self.model['f'], np.mean(self.v, 0)
+        return self.model['v'], self.model['f'], np.mean(self.model['v'], 0)
 
     def load_origin(self, origin_file: typing.Optional[Path] = None):
         if origin_file is None:
