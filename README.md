@@ -48,6 +48,15 @@ This joins all marked labels in the labels.npz files into the labels.npz file in
 
 ```--strict``` only merges frames where all cameras have marked points.
 
+### Compile to exe
+1. `conda activate bbo_acm-traingui`.
+2. Remove mkl: `conda install -c conda-forge nomkl`.
+3. Install py2exe: `conda install py2exe.
+4. If present, empty dist/ dirctory.
+5. `python setup_py2exe.py py2exe`.
+6. Copy `platforms` directory from `$HOME\.conda\envs\bbo_acm-traingui\Library\plugins` into `dist/`.
+7. Rename `dist` folder to `acm-traingui_standalone` and distribute.
+
 
 ## TODO
 - Document config
