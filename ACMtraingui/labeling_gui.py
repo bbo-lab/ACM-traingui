@@ -314,7 +314,11 @@ class MainWindow(QMainWindow):
             'labels': {},
             'buttons': {},
             'texts': {},
-            'status': {},  # This should be derived from button itself
+            'status': {  # control statuses - FIXME: should be derived from buttons with method
+                'toolbars_zoom': False,
+                'toolbars_pan': False,
+                'label3d_select': False,
+            }
         }
 
         # Sketch zoom stuff
@@ -365,7 +369,6 @@ class MainWindow(QMainWindow):
         self.showMaximized()
 
         self.init_files_folders()
-
         self.set_controls()
         self.set_layout()
 
@@ -1267,11 +1270,6 @@ class MainWindow(QMainWindow):
 
         # sketch zoom view
         controls['labels']['sketch_zoom'] = []
-
-        # control statuses - FIXME: should be derived from buttons with method
-        controls['status']['toolbars_zoom'] = False
-        controls['status']['toolbars_pan'] = False
-        controls['status']['label3d_select'] = False
 
         controls_layout_grid = QGridLayout()
         row = 0
