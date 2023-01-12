@@ -5,8 +5,9 @@ import numpy as np
 import os
 import sys
 import calibcamlib
+import time
 import typing
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt
@@ -30,8 +31,6 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 from matplotlib.image import AxesImage
 from matplotlib.figure import Figure
-from mpl_toolkits.mplot3d import proj3d
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from pathlib import Path
 
@@ -40,8 +39,6 @@ import imageio
 from ccvtools import rawio
 
 from ACMtraingui.config import load_cfg, save_cfg
-
-import warnings
 
 
 def rodrigues2rotmat_single(r):
@@ -321,6 +318,12 @@ class MainWindow(QMainWindow):
             }
         }
 
+        self.labels = {
+            'labels': {},
+            'fr_times': {},
+            'version': 0.2,
+        }
+
         # Sketch zoom stuff
         self.sketch_zoom_dy = None
         self.sketch_zoom_dx = None
@@ -372,8 +375,7 @@ class MainWindow(QMainWindow):
         self.set_controls()
         self.set_layout()
 
-        self.plot2d_draw_normal_ini()
-        self.plot3d_draw()
+        self.plot2d_ini()
 
         self.setFocus()
         self.setWindowTitle('Labeling GUI')
@@ -408,7 +410,7 @@ class MainWindow(QMainWindow):
 
             self.load_calibrations()
             self.load_origin()
-            self.load_model()
+            # self.load_model()
             self.load_sketch()
             self.load_labels()
 
@@ -417,31 +419,18 @@ class MainWindow(QMainWindow):
             labels_file = self.standardLabelsFile
 
         # load labels
-        if self.master:
-            if os.path.isfile(labels_file):
+        if not self.master:
+            labels_file = self.standardLabelsFolder / 'labels.npz'
+
+        if labels_file.is_file():
+            labels = np.load(labels_file.as_posix(), allow_pickle=True)['arr_0'][()]
+            if 'version' in labels:
+                self.labels = labels
                 self.labelsAreLoaded = True
-                # self.labels2d_all = np.load(labels_file, allow_pickle=True)[()]
-                self.labels2d_all = np.load(labels_file.as_posix(), allow_pickle=True)['arr_0'].item()
-                if self.get_pose_idx() in self.labels2d_all.keys():
-                    self.labels2d = copy.deepcopy(self.labels2d_all[self.get_pose_idx()])
-                if self.controls['status']['label3d_select']:
-                    if self.controls['lists']['labels3d'].currentItem().text() in self.labels2d.keys():
-                        self.selectedLabel2d = \
-                            np.copy(self.labels2d[self.controls['lists']['labels3d'].currentItem().text()])
             else:
-                print(f'WARNING: Autoloading failed. Labels file {labels_file} does not exist.')
+                print(f'WARNING: Autoloading failed. Legacy labels file {labels_file} not loaded.')
         else:
-            self.standardLabelsFile = self.standardLabelsFolder / 'labels.npz'
-            if self.standardLabelsFile.is_file():
-                self.labelsAreLoaded = True
-                self.labels2d_all = np.load(self.standardLabelsFile, self.labels2d_all, allow_pickle=True)[
-                    'arr_0'].item()
-                if self.get_pose_idx() in self.labels2d_all.keys():
-                    self.labels2d = copy.deepcopy(self.labels2d_all[self.get_pose_idx()])
-                    if self.controls['status']['label3d_select']:
-                        if self.controls['lists']['labels3d'].currentItem().text() in self.labels2d.keys():
-                            self.selectedLabel2d = \
-                                np.copy(self.labels2d[self.controls['lists']['labels3d'].currentItem().text()])
+            print(f'WARNING: Autoloading failed. Labels file {labels_file} does not exist.')
 
     def load_sketch(self, sketch_file: typing.Optional[Path] = None):
         if sketch_file is None:
@@ -459,9 +448,9 @@ class MainWindow(QMainWindow):
         else:
             print(f'WARNING: Autoloading failed. Sketch file {self.standardSketchFile} does not exist.')
 
-        if self.labels3d_sequence is None:
-            self.labels3d_sequence = list(self.get_sketch_labels().keys())
-            self.labels3d = self.get_sketch_labels()
+        for label_name in self.get_sketch_labels():
+            if label_name not in self.labels['labels']:
+                self.labels['labels'][label_name] = {}
 
     def get_sketch(self):
         return self.sketch['sketch']
@@ -471,31 +460,6 @@ class MainWindow(QMainWindow):
 
     def get_sketch_label_coordinates(self):
         return np.array(list(self.get_sketch_labels().values()), dtype=np.float64)
-
-    def load_model(self, model_file: typing.Optional[Path] = None):
-        if model_file is None:
-            model_file = self.standardModelFile
-
-        # load model
-        if model_file.is_file():
-            self.model = np.load(self.standardModelFile.as_posix(), allow_pickle=True)[()]
-            self.modelIsLoaded = True
-
-            if 'labels3d' in self.model:
-                self.labels3d = copy.deepcopy(self.model['labels3d'])
-                self.labels3d_sequence = sorted(list(self.labels3d.keys()))
-
-                self.labels3d_sequence = sort_label_sequence(self.labels3d_sequence)
-            else:
-                self.labels3d = dict()
-                self.labels3d_sequence = list([])
-                print(
-                    'WARNING: Model does not contain 3D Labels! This might lead to incorrect behavior of the GUI.')
-        else:
-            print(f'WARNING: Autoloading failed. 3D model file {model_file} does not exist.')
-
-    def get_model_v_f_vc(self):
-        return self.model['v'], self.model['f'], np.mean(self.model['v'], 0)
 
     def load_origin(self, origin_file: typing.Optional[Path] = None):
         if origin_file is None:
@@ -670,215 +634,84 @@ class MainWindow(QMainWindow):
 
     # 2d plots
     def plot2d_update(self):
-        if self.controls['status']['button_fastLabelingMode']:
-            self.plot2d_draw_labels(self.controls['axes']['2d'][self.i_cam], self.i_cam)
-            self.controls['figs']['2d'][self.i_cam].canvas.draw()
+        self.plot2d_draw_labels(self.controls['axes']['2d'])
+        self.controls['figs']['2d'].canvas.draw()
+
+    def plot2d_draw_labels(self, ax):
+        # ax.lines = list()
+
+        cam_idx = self.i_cam
+        frame_idx = self.get_pose_idx()
+        current_label_name = self.get_current_label()
+        for label_name in self.labels['labels']:
+            if frame_idx not in self.labels['labels'][label_name]:
+                continue
+
+            point = self.labels['labels'][label_name][frame_idx][cam_idx, :]
+
+            if current_label_name == label_name:
+                plotparams = {
+                    'color': 'darkgreen',
+                    'markersize': 4,
+                    'zorder': 3,
+                }
+            else:
+                plotparams = {
+                    'color': 'cyan',
+                    'markersize': 3,
+                    'zorder': 2,
+                }
+
+            if '2d' not in self.controls['plots']:
+                self.controls['plots']['2d'] = {}
+            if label_name in self.controls['plots']['2d']:
+                self.controls['plots']['2d'][label_name].remove()
+
+            self.controls['plots']['2d'][label_name] = ax.plot([point[0]], [point[1]],
+                                                               marker='o',
+                                                               **plotparams,
+                                                               )[0]
+
+    def get_current_label(self):
+        current_label_item = self.controls['lists']['labels'].currentItem()
+        if current_label_item is not None:
+            current_label_name = current_label_item.text()
         else:
-            for i_cam in range(len(self.cameras)):
-                self.plot2d_draw_labels(self.controls['axes']['2d'][i_cam], i_cam)
-                self.controls['figs']['2d'][i_cam].canvas.draw()
+            current_label_name = self.controls['lists']['labels'].item(0).text()
+        return current_label_name
 
-    def plot2d_draw_labels(self, ax, i_cam):
-        ax.lines = list()
-        # reprojection lines
-        if self.controls['status']['button_reprojectionMode'] & self.controls['status']['label3d_select']:
-            calib = self.get_calibration_params()
-            for i in range(len(self.cameras)):
-                if ((i != i_cam) &
-                        (not (np.any(np.isnan(self.selectedLabel2d[i]))))):
-
-                    # 2d point to 3d line
-                    n_line_elements = np.int64(1e3)
-
-                    point = self.selectedLabel2d[i]
-                    # lazy implementation of A**-1 * point
-                    #                    point = np.array([[point[0], point[1], 1.0]], dtype=np.float64)
-                    #                    A_1 = np.linalg.lstsq(calib['A'][i], np.identity(3), rcond=None)[0]
-                    #                    point = np.dot(A_1, point.T).T
-                    # fast implementation of A**-1 * point (assumes no skew!)
-                    point = np.array([[(point[0] - calib['A'][i][0, 2]) / calib['A'][i][0, 0],
-                                       (point[1] - calib['A'][i][1, 2]) / calib['A'][i][1, 1],
-                                       1.0]], dtype=np.float64)
-                    point = calc_udst(point, calib['k'][i]).T
-
-                    # beginning and end of linspace-function are arbitary
-                    # might need to increase the range here when the lines are not visible
-                    point = point * np.linspace(0, 1e3, n_line_elements)
-                    line = np.dot(calib['RX1'][i].T,
-                                  point - calib['tX1'][i].reshape(3, 1))
-
-                    if self.originIsLoaded:
-                        origin, coord = self.get_origin_coord()
-                        # transform into world coordinate system
-                        line = line - origin.reshape(3, 1)
-                        line = np.dot(coord.T, line)
-                        # only use line until intersection with the x-y-plane
-                        n = line[:, 0]
-                        m = line[:, -1] - line[:, 0]
-                        lambda_val = -n[2] / m[2]
-                        line = np.linspace(0.0, 1.0, n_line_elements).reshape(1, n_line_elements).T * m * lambda_val + n
-                        # transform back into coordinate system of camera i
-                        line = np.dot(coord, line.T)
-                        line = line + origin.reshape(3, 1)
-
-                    # 3d line to 2d point
-                    line_proj = np.dot(calib['RX1'][i_cam], line) + calib['tX1'][i_cam].reshape(3, 1)
-                    line_proj = calc_dst(line_proj.T, calib['k'][i_cam]).T
-                    line_proj = np.dot(calib['A'][i_cam], line_proj).T
-
-                    ax.plot(line_proj[:, 0], line_proj[:, 1],
-                            linestyle='-',
-                            color=self.colors[i % np.size(self.colors)],
-                            alpha=0.5,
-                            zorder=1,
-                            linewidth=1.0)
-        # labels
-        #        if (self.labels2d_exists):
-        for i_label in self.labels2d.keys():
-            point = self.labels2d[i_label][i_cam]
-            ax.plot([point[0]], [point[1]],
-                    marker='o',
-                    color='cyan',
-                    markersize=3,
-                    zorder=2)
-        if self.controls['status']['label3d_select']:
-            if not (np.any(np.isnan(self.selectedLabel2d[i_cam]))):
-                ax.plot([self.selectedLabel2d[i_cam, 0]],
-                        [self.selectedLabel2d[i_cam, 1]],
-                        marker='o',
-                        color='darkgreen',
-                        markersize=4,
-                        zorder=3)
-
-    def plot2d_plot_single_image_ini(self, ax, i_cam):
+    def plot2d_plot(self, ax, i_cam):
         reader = self.cameras[i_cam]["reader"]
         img = reader.get_data(self.pose_idx)
-        self.controls['plots']['images'][i_cam] = ax.imshow(img,
-                                                            aspect=1,
-                                                            cmap='gray',
-                                                            vmin=self.vmin,
-                                                            vmax=self.vmax)
-        ax.legend('',
-                  facecolor=self.colors[i_cam % np.size(self.colors)],
-                  loc='upper left',
-                  bbox_to_anchor=(0, 1))
-        #         self.h_titles[i_cam] = ax.set_title('camera: {:01d}, frame: {:06d}'.format(i_cam, self.pose_idx))
-        #         ax.set_xticklabels('')
-        #         ax.set_yticklabels('')
-        ax.axis('off')
-        if (self.controls['status']['button_fastLabelingMode'] &
-                self.controls['status']['button_centricViewMode']):
-            ax.set_xlim(self.cameras[i_cam]['x_lim_prev'])
-            ax.set_ylim(self.cameras[i_cam]['y_lim_prev'])
-            if not (np.any(np.isnan(self.selectedLabel2d[i_cam]))):
-                ax.set_xlim(self.selectedLabel2d[i_cam, 0] - self.dx,
-                            self.selectedLabel2d[i_cam, 0] + self.dx)
-                ax.set_ylim(self.selectedLabel2d[i_cam, 1] - self.dy,
-                            self.selectedLabel2d[i_cam, 1] + self.dy)
-            if not (np.any(np.isnan(self.clickedLabel2d))):
-                ax.set_xlim(self.clickedLabel2d[0] - self.dx,
-                            self.clickedLabel2d[0] + self.dx)
-                ax.set_ylim(self.clickedLabel2d[1] - self.dy,
-                            self.clickedLabel2d[1] + self.dy)
+
+        if self.controls['plots']['image2d'] is None:
+            self.controls['plots']['image2d'] = ax.imshow(img,
+                                                          aspect=1,
+                                                          cmap='gray',
+                                                          vmin=self.vmin,
+                                                          vmax=self.vmax)
+            ax.legend('',
+                      facecolor=self.colors[i_cam % np.size(self.colors)],
+                      loc='upper left',
+                      bbox_to_anchor=(0, 1))
+            ax.axis('off')
         else:
-            x_res = self.get_x_res()
-            y_res = self.get_y_res()
-            ax.set_xlim(0.0, x_res[i_cam] - 1)
-            ax.set_ylim(0.0, y_res[i_cam] - 1)
+            self.controls['plots']['image2d'].set_array(img)
+            self.controls['plots']['image2d'].set_clim(self.vmin, self.vmax)
+
+        x_res = self.get_x_res()
+        y_res = self.get_y_res()
+        ax.set_xlim(0.0, x_res[i_cam] - 1)
+        ax.set_ylim(0.0, y_res[i_cam] - 1)
+
         if self.cfg['invert_xaxis']:
             ax.invert_xaxis()
         if self.cfg['invert_yaxis']:
             ax.invert_yaxis()
         #
-        self.plot2d_draw_labels(ax, i_cam)
+        self.plot2d_draw_labels(ax)
 
-    def plot2d_plot_single_image(self, ax, i_cam):
-        reader = self.cameras[i_cam]["reader"]
-        img = reader.get_data(self.pose_idx)
-        self.controls['plots']['images'][i_cam].set_array(img)
-        self.controls['plots']['images'][i_cam].set_clim(self.vmin, self.vmax)
-        self.plot2d_draw_labels(ax, i_cam)
-        if (self.controls['status']['button_fastLabelingMode'] &
-                self.controls['status']['button_centricViewMode']):
-            ax.set_xlim(self.cameras[i_cam]['x_lim_prev'][0], self.cameras[i_cam]['x_lim_prev'][1])
-            ax.set_ylim(self.cameras[i_cam]['y_lim_prev'][0], self.cameras[i_cam]['y_lim_prev'][1])
-            if not (np.any(np.isnan(self.selectedLabel2d[i_cam]))):
-                ax.set_xlim(self.selectedLabel2d[i_cam, 0] - self.dx,
-                            self.selectedLabel2d[i_cam, 0] + self.dx)
-                ax.set_ylim(self.selectedLabel2d[i_cam, 1] - self.dy,
-                            self.selectedLabel2d[i_cam, 1] + self.dy)
-            if not (np.any(np.isnan(self.clickedLabel2d))):
-                ax.set_xlim(self.clickedLabel2d[0] - self.dx,
-                            self.clickedLabel2d[0] + self.dx)
-                ax.set_ylim(self.clickedLabel2d[1] - self.dy,
-                            self.clickedLabel2d[1] + self.dy)
-        else:
-            x_res = self.get_x_res()
-            y_res = self.get_y_res()
-            ax.set_xlim(0.0, x_res[i_cam] - 1)
-            ax.set_ylim(0.0, y_res[i_cam] - 1)
-        if self.cfg['invert_xaxis']:
-            ax.invert_xaxis()
-        if self.cfg['invert_yaxis']:
-            ax.invert_yaxis()
-        if self.cameras[i_cam]["rotate"]:
-            ax.invert_xaxis()  # Does calling this twice flip back?
-            ax.invert_yaxis()
-
-        self.controls['figs']['2d'][i_cam].canvas.draw()
-
-    def plot2d_draw_normal_ini(self):
-        for i in reversed(range(self.controls['grids']['views2d'].count())):
-            widget_to_remove = self.controls['grids']['views2d'].itemAt(i).widget()
-            self.controls['grids']['views2d'].removeWidget(widget_to_remove)
-            widget_to_remove.setParent(None)
-
-        if self.controls['status']['toolbars_zoom']:
-            self.button_zoom_press()
-        if self.controls['status']['toolbars_pan']:
-            self.button_pan_press()
-
-        self.controls['frames']['views2d'].setCursor(QCursor(QtCore.Qt.CrossCursor))
-        for i_cam in range(len(self.cameras)):
-            frame = QFrame()
-            frame.setParent(self.controls['frames']['views2d'])
-            frame.setStyleSheet("background-color: gray;")
-            fig = Figure(tight_layout=True)
-            fig.clear()
-            self.controls['figs']['2d'].append(fig)
-            canvas = FigureCanvasQTAgg(fig)
-            canvas.setParent(frame)
-            ax = fig.add_subplot('111')
-            ax.clear()
-            self.controls['axes']['2d'].append(ax)
-            self.controls['plots']['images'].append([])
-            self.plot2d_plot_single_image_ini(self.controls['axes']['2d'][-1], i_cam)
-
-            layout = QGridLayout()
-            layout.addWidget(canvas)
-            frame.setLayout(layout)
-
-            self.controls['grids']['views2d'].addWidget(frame,
-                                                        int(np.floor(i_cam / 2)),
-                                                        i_cam % 2)
-
-            toolbar = NavigationToolbar2QT(canvas, self)
-            toolbar.hide()
-            self.toolbars.append(toolbar)
-
-            fig.canvas.mpl_connect('button_press_event',
-                                   lambda event: self.plot2d_click(event))
-
-    def plot2d_draw_normal(self):
-        if self.controls['status']['toolbars_zoom']:
-            self.button_zoom_press()
-        if self.controls['status']['toolbars_pan']:
-            self.button_pan_press()
-
-        for i_cam in range(len(self.cameras)):
-            self.plot2d_plot_single_image(self.controls['axes']['2d'][i_cam], i_cam)
-
-    def plot2d_draw_fast_ini(self):
+    def plot2d_ini(self):
         for i in reversed(range(self.controls['grids']['views2d'].count())):
             widget_to_remove = self.controls['grids']['views2d'].itemAt(i).widget()
             self.controls['grids']['views2d'].removeWidget(widget_to_remove)
@@ -891,19 +724,21 @@ class MainWindow(QMainWindow):
 
         fig = Figure(tight_layout=True)
         fig.clear()
-        self.controls['figs']['2d'][self.i_cam] = fig
+        self.controls['figs']['2d'] = fig
         canvas = FigureCanvasQTAgg(fig)
         canvas.setParent(self.controls['frames']['views2d'])
         ax = fig.add_subplot('111')
         ax.clear()
-        self.controls['axes']['2d'][self.i_cam] = ax
-        self.plot2d_plot_single_image_ini(self.controls['axes']['2d'][self.i_cam], self.i_cam)
+        self.controls['axes']['2d'] = ax
+        self.plot2d_plot(self.controls['axes']['2d'], self.i_cam)
 
         self.controls['grids']['views2d'].addWidget(canvas, 0, 0)
 
         toolbar = NavigationToolbar2QT(canvas, self)
         toolbar.hide()
         self.toolbars = list([toolbar])
+
+        self.controls['frames']['views2d'].setCursor(QCursor(QtCore.Qt.CrossCursor))
 
         fig.canvas.mpl_connect('button_press_event',
                                lambda event: self.plot2d_click(event))
@@ -914,136 +749,47 @@ class MainWindow(QMainWindow):
         if self.controls['status']['toolbars_pan']:
             self.button_pan_press()
 
-        self.plot2d_plot_single_image(self.controls['axes']['2d'][self.i_cam], self.i_cam)
+        self.plot2d_plot(self.controls['axes']['2d'], self.i_cam)
 
     def plot2d_click(self, event):
-        if self.controls['status']['label3d_select'] & (not self.controls['status']['toolbars_zoom']) & \
-                (not self.controls['status']['toolbars_pan']):
+        if not self.controls['status']['toolbars_zoom'] and not self.controls['status']['toolbars_pan']:
             ax = event.inaxes
+
+            # Initialize array
+            cam_idx = self.i_cam
+            frame_idx = self.get_pose_idx()
+            label_name = self.get_current_label()
+
+            if label_name not in self.labels['labels']:
+                self.labels['labels'][label_name] = {}
+
+            if frame_idx not in self.labels['labels'][label_name]:
+                self.labels['labels'][label_name][frame_idx] = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
+                self.labels['fr_times'][frame_idx] = time.time()
+
             if ax is not None:
-                i_cam = self.controls['axes']['2d'].index(ax)
+                # Left mouse - create
                 if event.button == 1:
                     x = event.xdata
                     y = event.ydata
                     if (x is not None) and (y is not None):
-                        self.clickedLabel2d = np.array([x, y], dtype=np.float64)
-                        self.clickedLabel2d_pose = self.get_pose_idx()
-                        self.selectedLabel2d[i_cam] = np.array([x, y], dtype=np.float64)
-
-                        if not (self.controls['lists']['labels3d'].currentItem().text() in self.labels2d.keys()):
-                            self.labels2d[self.controls['lists']['labels3d'].currentItem().text()] = \
-                                np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
-                        self.labels2d[self.controls['lists']['labels3d'].currentItem().text()][i_cam] = \
-                            np.array([x, y], dtype=np.float64)
-
+                        coords = np.array([x, y], dtype=np.float64)
+                        self.labels['labels'][label_name][frame_idx][cam_idx] = coords
                         self.plot2d_update()
+
                         if self.controls['status']['button_sketchMode']:
                             self.sketch_update()
+
+                # Right mouse - delete
                 elif event.button == 3:
-                    self.clickedLabel2d = np.array([np.nan, np.nan], dtype=np.float64)
-                    self.selectedLabel2d[i_cam] = np.array([np.nan, np.nan], dtype=np.float64)
-                    if self.controls['lists']['labels3d'].currentItem().text() in self.labels2d.keys():
-                        self.labels2d[self.controls['lists']['labels3d'].currentItem().text()][i_cam] = np.array(
-                            [np.nan, np.nan],
-                            dtype=np.float64)
-                        if np.all(np.isnan(
-                                self.labels2d[self.controls['lists']['labels3d'].currentItem().text()])):
-                            del (self.labels2d[self.controls['lists']['labels3d'].currentItem().text()])
-                    if self.get_pose_idx() in self.labels2d_all.keys():
-                        if self.controls['lists']['labels3d'].currentItem().text() in \
-                                self.labels2d_all[self.get_pose_idx()].keys():
-                            self.labels2d_all[self.get_pose_idx()][
-                                self.controls['lists']['labels3d'].currentItem().text()][
-                                i_cam] = np.array(
-                                [np.nan, np.nan], dtype=np.float64)
-                            if np.all(
-                                    np.isnan(self.labels2d_all[self.get_pose_idx()][
-                                                 self.controls['lists']['labels3d'].currentItem().text()])):
-                                del (self.labels2d_all[self.get_pose_idx()][
-                                    self.controls['lists']['labels3d'].currentItem().text()])
-                        if not (bool(self.labels2d_all[self.get_pose_idx()])):
-                            del (self.labels2d_all[self.get_pose_idx()])
+                    self.labels['labels'][label_name][frame_idx][cam_idx, :] = np.nan
                     self.plot2d_update()
+
                     if self.controls['status']['button_sketchMode']:
                         self.sketch_update()
 
-    # 3d plot
-    def plot3d_draw(self):
-        for i in reversed(range(self.controls['grids']['views3d'].count())):
-            widget_to_remove = self.controls['grids']['views3d'].itemAt(i).widget()
-            self.controls['grids']['views3d'].removeWidget(widget_to_remove)
-            widget_to_remove.setParent(None)
-
-        self.controls['figs']['3d'].clear()
-        self.controls['axes']['3d'].clear()
-        self.controls['axes']['3d'].grid(False)
-
-        if self.modelIsLoaded:
-            v, f, v_center = self.get_model_v_f_vc()
-
-            n_poly = np.size(f, 0)
-            xyz = np.zeros((3, 3), dtype=np.float64)
-            xyz_all = np.zeros((n_poly, 3, 3), dtype=np.float64)
-
-            for i in range(n_poly):
-                f_use = f[i, :, 0]
-                xyz[0, :] = v[f_use[0] - 1]
-                xyz[1, :] = v[f_use[1] - 1]
-                xyz[2, :] = v[f_use[2] - 1]
-                xyz_all[i] = xyz
-
-            surf_model3d = Poly3DCollection(xyz_all)
-            surf_model3d.set_alpha(0.1)
-            surf_model3d.set_edgecolor('black')
-            surf_model3d.set_facecolor('gray')
-
-            self.controls['axes']['3d'].add_collection3d(surf_model3d)
-
-            # self.controls['axes']['3d'].set_aspect('equal')
-
-            self.controls['axes']['3d'].set_xlim([v_center[0] - self.dxyz_lim,
-                                                  v_center[0] + self.dxyz_lim])
-            self.controls['axes']['3d'].set_ylim([v_center[1] - self.dxyz_lim,
-                                                  v_center[1] + self.dxyz_lim])
-            self.controls['axes']['3d'].set_zlim([v_center[2] - self.dxyz_lim,
-                                                  v_center[2] + self.dxyz_lim])
-
-            self.controls['axes']['3d'].set_axis_off()
-
-        self.plot3d_update()
-        #        self.controls['figs']['3d'].tight_layout()
-
-        self.controls['grids']['views3d'].addWidget(self.controls['canvases']['3d'])
-
-    def plot3d_update(self):
-        return
-        self.controls['axes']['3d'].lines = list()
-        for label3d_name in self.labels3d.keys():
-            color = 'orange'
-            if label3d_name in self.label2d_max_err:
-                color = 'red'
-            elif label3d_name in self.labels2d.keys():
-                color = 'cyan'
-
-            self.controls['axes']['3d'].plot([self.labels3d[label3d_name][0]],
-                                             [self.labels3d[label3d_name][1]],
-                                             [self.labels3d[label3d_name][2]],
-                                             marker='o',
-                                             color=color,
-                                             markersize=4,
-                                             zorder=2)
-        #        if (self.controls['status']['label3d_select']):
-        self.controls['axes']['3d'].plot([self.selectedLabel3d[0]],
-                                         [self.selectedLabel3d[1]],
-                                         [self.selectedLabel3d[2]],
-                                         marker='o',
-                                         color='darkgreen',
-                                         markersize=6,
-                                         zorder=3)
-        self.controls['canvases']['3d'].draw()
-
     # sketch
-    def sketch_draw(self):
+    def sketch_init(self):
         for i in reversed(range(self.controls['grids']['views3d'].count())):
             widget_to_remove = self.controls['grids']['views3d'].itemAt(i).widget()
             self.controls['grids']['views3d'].removeWidget(widget_to_remove)
@@ -1054,47 +800,24 @@ class MainWindow(QMainWindow):
         self.controls['figs']['sketch'].clear()
 
         # full
-        ax_sketch_left = 0 / 3
-        ax_sketch_bottom = 1 / 18
-        ax_sketch_width = 1 / 3
-        ax_sketch_height = 16 / 18
-        ax_sketch = self.controls['figs']['sketch'].add_axes([ax_sketch_left,
-                                                              ax_sketch_bottom,
-                                                              ax_sketch_width,
-                                                              ax_sketch_height])
-        ax_sketch.clear()
-        ax_sketch.grid(False)
-        ax_sketch.imshow(sketch)
-        ax_sketch.axis('off')
-        ax_sketch.set_title('Full:',
-                            ha='center', va='center',
-                            zorder=0)
-        self.controls['plots']['sketch_point'] = ax_sketch.plot([np.nan], [np.nan],
-                                                                color='darkgreen',
-                                                                marker='.',
-                                                                markersize=2,
-                                                                alpha=1.0,
-                                                                zorder=2)
-        self.controls['plots']['sketch_circle'] = ax_sketch.plot([np.nan], [np.nan],
-                                                                 color='darkgreen',
-                                                                 marker='o',
-                                                                 markersize=20,
-                                                                 markeredgewidth=2,
-                                                                 fillstyle='none',
-                                                                 alpha=2 / 3,
-                                                                 zorder=2)
-        ax_sketch.set_xlim([-self.sketch_zoom_dx / 2, np.shape(sketch)[1] + self.sketch_zoom_dx / 2])
-        ax_sketch.set_ylim([-self.sketch_zoom_dy / 2, np.shape(sketch)[0] + self.sketch_zoom_dy / 2])
-        ax_sketch.invert_yaxis()
+        ax_sketch_dims = [0 / 3, 1 / 18, 1 / 3, 16 / 18]
+        self.controls['axes']['sketch'] = self.controls['figs']['sketch'].add_axes(ax_sketch_dims)
+        self.controls['axes']['sketch'].clear()
+        self.controls['axes']['sketch'].grid(False)
+        self.controls['axes']['sketch'].imshow(sketch)
+        self.controls['axes']['sketch'].axis('off')
+        self.controls['axes']['sketch'].set_title('Full:',
+                                                  ha='center', va='center',
+                                                  zorder=0)
+
+        self.controls['axes']['sketch'].set_xlim(
+            [-self.sketch_zoom_dx / 2, np.shape(sketch)[1] + self.sketch_zoom_dx / 2])
+        self.controls['axes']['sketch'].set_ylim(
+            [-self.sketch_zoom_dy / 2, np.shape(sketch)[0] + self.sketch_zoom_dy / 2])
+        self.controls['axes']['sketch'].invert_yaxis()
         # zoom
-        ax_sketch_zoom_left = 1 / 3
-        ax_sketch_zoom_bottom = 5 / 18
-        ax_sketch_zoom_width = 2 / 3
-        ax_sketch_zoom_height = 12 / 18
-        self.controls['axes']['sketch_zoom'] = self.controls['figs']['sketch'].add_axes([ax_sketch_zoom_left,
-                                                                                         ax_sketch_zoom_bottom,
-                                                                                         ax_sketch_zoom_width,
-                                                                                         ax_sketch_zoom_height])
+        ax_sketch_zoom_dims = [1 / 3, 5 / 18, 2 / 3, 12 / 18]
+        self.controls['axes']['sketch_zoom'] = self.controls['figs']['sketch'].add_axes(ax_sketch_zoom_dims)
         self.controls['axes']['sketch_zoom'].imshow(sketch)
         self.controls['axes']['sketch_zoom'].set_xlabel('')
         self.controls['axes']['sketch_zoom'].set_ylabel('')
@@ -1106,20 +829,7 @@ class MainWindow(QMainWindow):
                                                        ha='center', va='center',
                                                        zorder=0)
         self.controls['axes']['sketch_zoom'].grid(False)
-        self.controls['plots']['sketch_zoom_point'] = self.controls['axes']['sketch_zoom'].plot([np.nan], [np.nan],
-                                                                                                color='darkgreen',
-                                                                                                marker='.',
-                                                                                                markersize=4,
-                                                                                                alpha=1.0,
-                                                                                                zorder=2)
-        self.controls['plots']['sketch_zoom_circle'] = self.controls['axes']['sketch_zoom'].plot([np.nan], [np.nan],
-                                                                                                 color='darkgreen',
-                                                                                                 marker='o',
-                                                                                                 markersize=40,
-                                                                                                 markeredgewidth=4,
-                                                                                                 fillstyle='none',
-                                                                                                 alpha=2 / 3,
-                                                                                                 zorder=2)
+
         self.controls['axes']['sketch_zoom'].set_xlim(
             [np.shape(sketch)[1] / 2 - self.sketch_zoom_dx, np.shape(sketch)[1] / 2 + self.sketch_zoom_dx])
         self.controls['axes']['sketch_zoom'].set_ylim(
@@ -1127,119 +837,95 @@ class MainWindow(QMainWindow):
         self.controls['axes']['sketch_zoom'].invert_yaxis()
         # text
         self.controls['texts']['sketch'] = self.controls['figs']['sketch'].text(
-            ax_sketch_zoom_left + ax_sketch_zoom_width / 2,
-            ax_sketch_zoom_bottom / 2,
+            ax_sketch_dims[0] + ax_sketch_dims[2] / 2,
+            ax_sketch_dims[1] / 2,
             'Label {:02d}:\n{:s}'.format(0, ''),
             ha='center', va='center',
             fontsize=18,
             zorder=2)
-        # overview of marked labels
-        for label_name, label_location in self.get_sketch_labels().items():
-            color = 'orange'
-            if label_name in self.labels2d:
-                if label_name in self.label2d_max_err:
-                    color = 'red'
-                elif self.controls['status']['button_fastLabelingMode']:
-                    if np.all(np.logical_not(np.isnan(self.labels2d[label_name][self.i_cam]))):
-                        color = 'cyan'
-                else:
-                    if np.any(np.logical_not(np.isnan(self.labels2d[label_name]))):
-                        color = 'cyan'
 
-            sketch_labels = ax_sketch.plot([label_location[0]],
-                                           [label_location[1]],
-                                           marker='o',
-                                           color=color,
-                                           markersize=3,
-                                           zorder=1)
-            self.controls['labels']['sketch'].append(sketch_labels[0])
-            sketch_zoom_labels = self.controls['axes']['sketch_zoom'].plot([label_location[0]],
-                                                                           [label_location[1]],
-                                                                           marker='o',
-                                                                           color=color,
-                                                                           markersize=5,
-                                                                           zorder=1)
-            self.controls['labels']['sketch_zoom'].append(sketch_zoom_labels[0])
-        try:
-            # set selected label to first in sequence if none is selected
-            if not self.controls['status']['label3d_select']:
-                first_label_name = self.labels3d_sequence[0]
-                sorted_index = sorted(list(self.labels3d.keys())).index(first_label_name)
-                self.controls['lists']['labels3d'].setCurrentRow(sorted_index)
-                self.list_labels3d_select()
-        except:
-            pass
+        self.controls['labels']['sketch'] = {}
+        self.controls['labels']['sketch_zoom'] = {}
 
+        self.sketch_init_labels()
         self.sketch_update()
         self.controls['grids']['views3d'].addWidget(self.controls['canvases']['sketch'])
 
+    def sketch_init_labels(self):
+        dot_params = {
+            'color': 'darkgreen',
+            'marker': '.',
+            'markersize': 2,
+            'alpha': 1.0,
+            'zorder': 2,
+        }
+        circle_params = {
+            'color': 'darkgreen',
+            'marker': 'o',
+            'markersize': 40,
+            'markeredgewidth': 4,
+            'fillstyle': 'none',
+            'alpha': 2 / 3,
+            'zorder': 2,
+        }
+
+        for ln in ['sketch_dot', 'sketch_circle', 'sketch_zoom_dot', 'sketch_zoom_circle']:
+            if ln in self.controls['plots']:
+                self.controls['plots'][ln].remove()
+        self.controls['plots']['sketch_dot'] = self.controls['axes']['sketch'].plot(
+            [np.nan], [np.nan], **dot_params)[0]
+        self.controls['plots']['sketch_circle'] = self.controls['axes']['sketch'].plot(
+            [np.nan], [np.nan], **circle_params)[0]
+        self.controls['plots']['sketch_zoom_dot'] = self.controls['axes']['sketch_zoom'].plot(
+            [np.nan], [np.nan], **dot_params)[0]
+        self.controls['plots']['sketch_zoom_circle'] = self.controls['axes']['sketch_zoom'].plot(
+            [np.nan], [np.nan], **circle_params)[0]
+
+        for label_name, label_location in self.get_sketch_labels().items():
+            if label_name in self.controls['labels']['sketch']:
+                self.controls['labels']['sketch'][label_name].remove()
+            self.controls['labels']['sketch'][label_name] = \
+                self.controls['axes']['sketch'].plot([label_location[0]], [label_location[1]],
+                                                     marker='o',
+                                                     color='orange',
+                                                     markersize=3,
+                                                     zorder=1)[0]
+
+            if label_name in self.controls['labels']['sketch_zoom']:
+                self.controls['labels']['sketch_zoom'][label_name].remove()
+            self.controls['labels']['sketch_zoom'][label_name] = \
+                self.controls['axes']['sketch_zoom'].plot([label_location[0]],
+                                                          [label_location[1]],
+                                                          marker='o',
+                                                          color='orange',
+                                                          markersize=5,
+                                                          zorder=1)[0]
+
     def sketch_update(self):
-        if self.controls['status']['label3d_select']:
-            label_coordinates = self.get_sketch_label_coordinates()
-            selected_label_name = self.controls['lists']['labels3d'].currentItem().text()
-            label_index = self.labels3d_sequence.index(selected_label_name)
-            x = label_coordinates[label_index, 0]
-            y = label_coordinates[label_index, 1]
+        sketch_labels = self.get_sketch_labels()
+        label_names = list(self.labels['labels'].keys())
 
-            sellabelerr = np.asarray([])
-            labelerr = np.asarray([])
-            if self.camera_system is not None and len(self.labels2d.keys()) > 0:
-                # self.labels2d[i_label][i_cam]
-                # self.selectedLabel2d[i_cam, 0]
+        for label_name in label_names:
+            self.controls['labels']['sketch'][label_name].set(color='orange')
+            self.controls['labels']['sketch_zoom'][label_name].set(color='orange')
 
-                labels2d = np.zeros(
-                    shape=(self.selectedLabel2d.shape[0], len(self.labels2d.keys()), self.selectedLabel2d.shape[1]))
-                labels2d[:] = np.NaN
-                for i, m in enumerate(self.labels2d.keys()):
-                    labels2d[:, i, :] = self.labels2d[m][:, :]
+        current_label_name = self.get_current_label()
+        if current_label_name is None or current_label_name not in sketch_labels:
+            return
 
-                (X, P, V) = self.camera_system.triangulate_3derr(labels2d)
-                sel_x = self.camera_system.project(X)
-                labelerr = np.sum((labels2d - sel_x) ** 2, axis=2)
+        (x, y) = sketch_labels[current_label_name]
 
-                (X, P, V) = self.camera_system.triangulate_3derr(self.selectedLabel2d[:, np.newaxis, :])
-                sel_x = self.camera_system.project(X)
-                sellabelerr = np.sum((self.selectedLabel2d[:, np.newaxis, :] - sel_x) ** 2, axis=2)
+        self.controls['plots']['sketch_dot'].set_data([x], [y])
+        self.controls['plots']['sketch_circle'].set_data([x], [y])
+        # zoom
+        self.controls['plots']['sketch_zoom_dot'].set_data([x], [y])
+        self.controls['plots']['sketch_zoom_circle'].set_data([x], [y])
+        self.controls['axes']['sketch_zoom'].set_xlim([x - self.sketch_zoom_dx, x + self.sketch_zoom_dx])
+        self.controls['axes']['sketch_zoom'].set_ylim([y - self.sketch_zoom_dy, y + self.sketch_zoom_dy])
+        self.controls['axes']['sketch_zoom'].invert_yaxis()
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
-
-                if not sellabelerr.size == 0 and not labelerr.size == 0:
-                    self.controls['texts']['sketch'].set(
-                        text=f'Label {(label_index + 1):02d}:\n{selected_label_name}'
-                             f'Label error: {np.nanmax(sellabelerr):6.1f}\nFrame error: {np.nanmax(labelerr):6.1f}')
-                    self.label2d_max_err = np.asarray(list(self.labels2d.keys()))[
-                        np.nanmax(labelerr) == np.nanmax(labelerr, axis=0)]
-                else:
-                    self.controls['texts']['sketch'].set(text=f'Label {(label_index + 1):02d}:\n{selected_label_name}')
-
-            # labels
-            for label_index in range(np.size(self.labels3d_sequence)):
-                color = 'orange'
-                label_name = self.labels3d_sequence[label_index]
-                if label_name in self.labels2d:
-                    if label_name in self.label2d_max_err:
-                        color = 'red'
-                    elif self.controls['status']['button_fastLabelingMode']:
-                        if np.all(np.logical_not(np.isnan(self.labels2d[label_name][self.i_cam]))):
-                            color = 'cyan'
-                    else:
-                        if np.any(np.logical_not(np.isnan(self.labels2d[label_name]))):
-                            color = 'cyan'
-                self.controls['labels']['sketch'][label_index].set(color=color)
-                self.controls['labels']['sketch_zoom'][label_index].set(color=color)
-            # full
-            self.controls['plots']['sketch_point'][0].set_data([x], [y])
-            self.controls['plots']['sketch_circle'][0].set_data([x], [y])
-            # zoom
-            self.controls['plots']['sketch_zoom_point'][0].set_data([x], [y])
-            self.controls['plots']['sketch_zoom_circle'][0].set_data([x], [y])
-            self.controls['axes']['sketch_zoom'].set_xlim([x - self.sketch_zoom_dx, x + self.sketch_zoom_dx])
-            self.controls['axes']['sketch_zoom'].set_ylim([y - self.sketch_zoom_dy, y + self.sketch_zoom_dy])
-            self.controls['axes']['sketch_zoom'].invert_yaxis()
-
-            self.controls['canvases']['sketch'].draw()
-            self.button_zoom_press(tostate=["off"])
+        self.controls['canvases']['sketch'].draw()
+        self.button_zoom_press(tostate=["off"])
 
     # controls
     def set_controls(self):
@@ -1249,9 +935,9 @@ class MainWindow(QMainWindow):
         controls['frames']['controls'] = QFrame()
 
         # 3d view
-        controls['figs']['3d'] = Figure(tight_layout=True)
-        controls['axes']['3d'] = controls['figs']['3d'].add_subplot(111, projection='3d')
-        controls['canvases']['3d'] = FigureCanvasQTAgg(controls['figs']['3d'])
+        # controls['figs']['3d'] = Figure(tight_layout=True)
+        # controls['axes']['3d'] = controls['figs']['3d'].add_subplot(111, projection='3d')
+        # controls['canvases']['3d'] = FigureCanvasQTAgg(controls['figs']['3d'])
         controls['frames']['views3d'] = QFrame()
         controls['grids']['views3d'] = QGridLayout()
 
@@ -1260,7 +946,7 @@ class MainWindow(QMainWindow):
         controls['axes']['2d'] = []
         controls['frames']['views2d'] = QFrame()
         controls['grids']['views2d'] = QGridLayout()
-        controls['plots']['images']: List[AxesImage] = []
+        controls['plots']['image2d']: Optional[AxesImage] = None
 
         # sketch view
         controls['figs']['sketch'] = Figure()
@@ -1393,8 +1079,8 @@ class MainWindow(QMainWindow):
         list_fast_labeling_mode.setSizePolicy(QSizePolicy.Expanding,
                                               QSizePolicy.Preferred)
         controls_layout_grid.addWidget(list_fast_labeling_mode, row, col, 2, 2)
-        list_fast_labeling_mode.currentIndexChanged.connect(self.list_fast_labeling_mode_change)
-        list_fast_labeling_mode.setEnabled(self.cfg['list_fastLabelingMode'])
+        # list_fast_labeling_mode.currentIndexChanged.connect(self.list_fast_labeling_mode_change)
+        # list_fast_labeling_mode.setEnabled(self.cfg['list_fastLabelingMode'])
         controls['lists']['fast_labeling_mode'] = list_fast_labeling_mode
         row = row + 2
         col = 0
@@ -1498,15 +1184,15 @@ class MainWindow(QMainWindow):
         controls['fields']['labels3d'] = field_labels3d
         col = col + 1
 
-        list_labels3d = QListWidget()
-        list_labels3d.setSortingEnabled(True)
-        list_labels3d.addItems(sorted(list(self.labels3d.keys())))
-        list_labels3d.setSelectionMode(QAbstractItemView.SingleSelection)
-        list_labels3d.itemClicked.connect(self.list_labels3d_select)
+        list_labels = QListWidget()
+        # list_labels.setSortingEnabled(True)
+        list_labels.addItems(list(self.labels['labels'].keys()))
+        list_labels.setSelectionMode(QAbstractItemView.SingleSelection)
+        list_labels.itemClicked.connect(self.list_labels_select)
         field_labels3d.setSizePolicy(QSizePolicy.Expanding,
                                      QSizePolicy.Preferred)
-        controls_layout_grid.addWidget(list_labels3d, row, col, 3, 2)
-        controls['lists']['labels3d'] = list_labels3d
+        controls_layout_grid.addWidget(list_labels, row, col, 3, 2)
+        controls['lists']['labels'] = list_labels
         row = row + 1
         col = 0
 
@@ -1530,7 +1216,7 @@ class MainWindow(QMainWindow):
         controls['status']['button_label3d'] = False
         button_label3d.setStyleSheet("background-color: darkred;")
         button_label3d.setText('Label 3D')
-        button_label3d.clicked.connect(self.button_label3d_press)
+        # button_label3d.clicked.connect(self.button_label3d_press)
         controls_layout_grid.addWidget(button_label3d, row, col)
         button_label3d.setEnabled(self.cfg['button_label3d'])
         controls['buttons']['label3d'] = button_label3d
@@ -1698,21 +1384,12 @@ class MainWindow(QMainWindow):
 
             self.set_pose_idx(0)
 
-            if self.controls['status']['button_fastLabelingMode']:
-                self.plot2d_draw_fast_ini()
-            else:
-                self.plot2d_draw_normal_ini()
+            self.plot2d_ini()
 
             self.controls['buttons']['load_recording'].setStyleSheet("background-color: green;")
             print('Loaded recording:')
             for i_rec in rec_file_names:
                 print(i_rec)
-
-            self.controls['lists']['fast_labeling_mode'].currentIndexChanged.disconnect()
-            self.controls['lists']['fast_labeling_mode'].clear()
-            self.controls['lists']['fast_labeling_mode'].addItems([str(i) for i in range(len(self.cameras))])
-            self.controls['lists']['fast_labeling_mode'].currentIndexChanged.connect(
-                self.list_fast_labeling_mode_change)
 
         self.controls['buttons']['load_recording'].clearFocus()
 
@@ -1747,32 +1424,7 @@ class MainWindow(QMainWindow):
         self.controls['buttons']['load_origin'].clearFocus()
 
     def button_load_model_press(self):
-        dialog = QFileDialog()
-        dialog.setStyleSheet("background-color: white;")
-        dialog_options = dialog.Options()
-        dialog_options |= dialog.DontUseNativeDialog
-        file_name, _ = QFileDialog.getOpenFileName(dialog,
-                                                   "Choose model file",
-                                                   ""
-                                                   "npy files (*.npy)",
-                                                   options=dialog_options)
-        if file_name:
-            self.load_model(Path(file_name))
-
-            self.controls['lists']['labels3d'].clear()
-            self.controls['lists']['labels3d'].addItems(sorted(list(self.labels3d.keys())))
-
-            self.modelIsLoaded = True
-
-            self.controls['status']['label3d_select'] = False
-            self.selectedLabel3d = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
-            self.selectedLabel2d = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
-            self.clickedLabel2d = np.array([np.nan, np.nan], dtype=np.float64)
-
-            self.plot3d_draw()
-            self.controls['buttons']['load_model'].setStyleSheet("background-color: green;")
-            print('Loaded model ({:s})'.format(file_name))
-        self.controls['buttons']['load_model'].clearFocus()
+        return
 
     def button_save_model_press(self):
         if self.modelIsLoaded:
@@ -1810,9 +1462,9 @@ class MainWindow(QMainWindow):
             if self.get_pose_idx() in self.labels2d_all.keys():
                 self.labels2d = copy.deepcopy(self.labels2d_all[self.get_pose_idx()])
             if self.controls['status']['label3d_select']:
-                if self.controls['lists']['labels3d'].currentItem().text() in self.labels2d.keys():
+                if self.controls['lists']['labels'].currentItem().text() in self.labels2d.keys():
                     self.selectedLabel2d = np.copy(
-                        self.labels2d[self.controls['lists']['labels3d'].currentItem().text()])
+                        self.labels2d[self.controls['lists']['labels'].currentItem().text()])
 
             self.labelsAreLoaded = True
             self.controls['buttons']['load_labels'].setStyleSheet("background-color: green;")
@@ -1835,13 +1487,13 @@ class MainWindow(QMainWindow):
                 if bool(self.labels2d):
                     self.labels2d_all[self.get_pose_idx()] = copy.deepcopy(self.labels2d)
                 # np.save(fileName, self.labels2d_all)
-                np.savez(file_name, self.labels2d_all)
+                np.savez(file_name, self.labels)
                 print('Saved labels ({:s})'.format(file_name))
         else:
             if bool(self.labels2d):
                 self.labels2d_all[self.get_pose_idx()] = copy.deepcopy(self.labels2d)
             # np.save(self.standardLabelsFile, self.labels2d_all)
-            np.savez(self.standardLabelsFile, self.labels2d_all)
+            np.savez(self.standardLabelsFile, self.labels)
             print(f'Saved labels ({self.standardLabelsFile})')
         self.controls['buttons']['save_labels'].clearFocus()
 
@@ -1869,7 +1521,7 @@ class MainWindow(QMainWindow):
                 if self.controls['status']['button_sketchMode']:
                     self.controls['buttons']['sketch_mode'].setStyleSheet("background-color: darkred;")
                     self.controls['status']['button_sketchMode'] = not self.controls['status']['button_sketchMode']
-                    self.plot3d_draw()
+                    # self.plot3d_draw()
                     self.controls['figs']['sketch'].canvas.mpl_disconnect(self.cidSketch)
                 else:
                     print('WARNING: Model needs to be loaded first')
@@ -1877,7 +1529,7 @@ class MainWindow(QMainWindow):
                 if True:
                     self.controls['buttons']['sketch_mode'].setStyleSheet("background-color: green;")
                     self.controls['status']['button_sketchMode'] = not self.controls['status']['button_sketchMode']
-                    self.sketch_draw()
+                    self.sketch_init()
                     self.cidSketch = self.controls['canvases']['sketch'].mpl_connect('button_press_event',
                                                                                      lambda event: self.sketch_click(
                                                                                          event))
@@ -1894,26 +1546,32 @@ class MainWindow(QMainWindow):
                 print('WARNING: Label already exists')
             else:
                 self.labels3d[self.controls['fields']['labels3d'].text()] = copy.deepcopy(self.clickedLabel3d)
-                self.controls['lists']['labels3d'].addItems([self.controls['fields']['labels3d'].text()])
+                self.controls['lists']['labels'].addItems([self.controls['fields']['labels3d'].text()])
                 self.clickedLabel3d = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
                 self.controls['fields']['labels3d'].setText(str(''))
-                self.plot3d_update()
         self.controls['buttons']['insert'].clearFocus()
         self.controls['fields']['labels3d'].clearFocus()
 
     def button_remove_press(self):
-        if self.controls['lists']['labels3d'].currentItem() is not None:
+        if self.controls['lists']['labels'].currentItem() is not None:
             self.controls['status']['label3d_select'] = False
             self.selectedLabel3d = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
             self.selectedLabel2d = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
             self.clickedLabel2d = np.array([np.nan, np.nan], dtype=np.float64)
-            del (self.labels3d[self.controls['lists']['labels3d'].currentItem().text()])
-            self.controls['lists']['labels3d'].takeItem(self.controls['lists']['labels3d'].currentRow())
+            del (self.labels3d[self.controls['lists']['labels'].currentItem().text()])
+            self.controls['lists']['labels'].takeItem(self.controls['lists']['labels'].currentRow())
             self.plot2d_update()
-            self.plot3d_update()
         self.controls['buttons']['remove'].clearFocus()
 
-    def list_labels3d_select(self):
+    def list_labels_select(self):
+        self.trigger_autosave_event()
+        self.plot2d_draw_fast()
+        self.plot2d_update()
+        self.sketch_update()
+        # self.plot3d_update()
+        self.controls['lists']['labels'].clearFocus()
+
+    def trigger_autosave_event(self):
         if self.cfg['autoSave'] and not self.master:
             self.autoSaveCounter = self.autoSaveCounter + 1
             if np.mod(self.autoSaveCounter, self.cfg['autoSaveN0']) == 0:
@@ -1923,7 +1581,7 @@ class MainWindow(QMainWindow):
                 # np.save(file, self.labels2d_all)
                 # print('Automatically saved labels ({:s})'.format(file.as_posix()))
                 file = self.standardLabelsFolder / 'labels.npz'  # this is equal to self.standardLabelsFile
-                np.savez(file, self.labels2d_all)
+                np.savez(file, self.labels)
                 print('Automatically saved labels ({:s})'.format(file.as_posix()))
             if np.mod(self.autoSaveCounter, self.cfg['autoSaveN1']) == 0:
                 if bool(self.labels2d):
@@ -1932,69 +1590,17 @@ class MainWindow(QMainWindow):
                 # np.save(file, self.labels2d_all)
                 # print('Automatically saved labels ({:s})'.format(file.as_posix()))
                 file = self.standardLabelsFolder / 'autosave' / 'labels.npz'
-                np.savez(file, self.labels2d_all)
+                np.savez(file, self.labels)
                 print('Automatically saved labels ({:s})'.format(file.as_posix()))
                 #
                 self.autoSaveCounter = 0
 
-        self.controls['status']['label3d_select'] = True
-        if self.controls['status']['button_label3d']:
-            self.button_label3d_press()
-        self.clickedLabel2d = np.array([np.nan, np.nan], dtype=np.float64)
-        self.clickedLabel3d = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
-        self.selectedLabel3d = copy.deepcopy(
-            self.labels3d[self.controls['lists']['labels3d'].currentItem().text()])
-        if self.controls['lists']['labels3d'].currentItem().text() in self.labels2d.keys():
-            self.selectedLabel2d = np.copy(
-                self.labels2d[self.controls['lists']['labels3d'].currentItem().text()])
-        else:
-            self.selectedLabel2d = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
-        if self.controls['status']['button_centricViewMode']:
-            self.plot2d_draw_fast()
-        self.plot2d_update()
-        if self.controls['status']['button_sketchMode']:
-            self.sketch_update()
-        else:
-            self.plot3d_update()
-        self.controls['lists']['labels3d'].clearFocus()
-
     def button_fast_labeling_mode_press(self):
-        if self.recordingIsLoaded:
-            if self.controls['status']['button_fastLabelingMode']:
-                if self.controls['status']['button_centricViewMode']:
-                    self.button_centric_view_mode_press()
-                self.controls['buttons']['fast_labeling_mode'].setStyleSheet("background-color: darkred;")
-                self.controls['status']['button_fastLabelingMode'] = not self.controls['status'][
-                    'button_fastLabelingMode']
-                self.plot2d_draw_normal_ini()
-            else:
-                self.controls['buttons']['fast_labeling_mode'].setStyleSheet("background-color: green;")
-                self.controls['status']['button_fastLabelingMode'] = not self.controls['status'][
-                    'button_fastLabelingMode']
-                self.plot2d_draw_fast_ini()
-            if self.controls['status']['button_sketchMode']:
-                self.sketch_update()
-        else:
-            print('WARNING: Recording needs to be loaded first')
-        self.controls['buttons']['fast_labeling_mode'].clearFocus()
-
-    # getting camera selection by directly accesing list_fastLabelingMode
-    def list_fast_labeling_mode_change(self):
-        self.i_cam = self.controls['lists']['fast_labeling_mode'].currentIndex()
-        x_res = self.get_x_res()
-        y_res = self.get_y_res()
-        self.cameras[self.i_cam]['x_lim_prev'] = np.array([0.0, x_res[self.i_cam] - 1], dtype=np.float64)
-        self.cameras[self.i_cam]['y_lim_prev'] = np.array([0.0, y_res[self.i_cam] - 1], dtype=np.float64)
-        self.clickedLabel2d = np.array([np.nan, np.nan], dtype=np.float64)
-        if self.controls['status']['button_fastLabelingMode']:
-            self.plot2d_draw_fast_ini()
-        if self.controls['status']['button_sketchMode']:
-            self.sketch_update()
-        self.controls['lists']['fast_labeling_mode'].clearFocus()
+        return
 
     def button_centric_view_mode_press(self):
         if self.controls['status']['button_fastLabelingMode']:
-            if not (self.controls['lists']['labels3d'].currentItem() is None):
+            if not (self.controls['lists']['labels'].currentItem() is None):
                 self.controls['status']['button_centricViewMode'] = not self.controls['status'][
                     'button_centricViewMode']
                 #                 self.plot2d_drawFast_ini()
@@ -2058,13 +1664,10 @@ class MainWindow(QMainWindow):
             self.vmin = int(np.max([0, self.vmin]))
             self.vmin = int(np.min([self.vmin, 254]))
             self.vmin = int(np.min([self.vmin, self.vmax - 1]))
-        if self.controls['status']['button_fastLabelingMode']:
-            self.controls['plots']['images'][self.i_cam].set_clim(self.vmin, self.vmax)
-            self.controls['figs']['2d'][self.i_cam].canvas.draw()
         else:
             for i_cam in range(len(self.cameras)):
-                self.controls['plots']['images'][i_cam].set_clim(self.vmin, self.vmax)
-                self.controls['figs']['2d'][i_cam].canvas.draw()
+                self.controls['plots']['image2d'].set_clim(self.vmin, self.vmax)
+                self.controls['figs']['2d'].canvas.draw()
         self.controls['fields']['vmin'].setText(str(self.vmin))
         self.controls['fields']['vmin'].clearFocus()
 
@@ -2080,12 +1683,12 @@ class MainWindow(QMainWindow):
             self.vmax = int(np.min([self.vmax, 255]))
             self.vmax = int(np.max([self.vmin + 1, self.vmax]))
         if self.controls['status']['button_fastLabelingMode']:
-            self.controls['plots']['images'][self.i_cam].set_clim(self.vmin, self.vmax)
-            self.controls['figs']['2d'][self.i_cam].canvas.draw()
+            self.controls['plots']['image2d'].set_clim(self.vmin, self.vmax)
+            self.controls['figs']['2d'].canvas.draw()
         else:
             for i_cam in range(len(self.cameras)):
-                self.controls['plots']['images'][i_cam].set_clim(self.vmin, self.vmax)
-                self.controls['figs']['2d'][i_cam].canvas.draw()
+                self.controls['plots']['image2d'].set_clim(self.vmin, self.vmax)
+                self.controls['figs']['2d'].canvas.draw()
         self.controls['fields']['vmax'].setText(str(self.vmax))
         self.controls['fields']['vmax'].clearFocus()
 
@@ -2097,24 +1700,23 @@ class MainWindow(QMainWindow):
             for i_cam in range(len(self.cameras)):
                 self.cameras[i_cam]['x_lim_prev'] = np.array([0.0, x_res[i_cam] - 1], dtype=np.float64)
                 self.cameras[i_cam]['y_lim_prev'] = np.array([0.0, y_res[i_cam] - 1], dtype=np.float64)
-            if self.controls['status']['button_fastLabelingMode']:
-                self.plot2d_draw_fast()
-            else:
-                self.plot2d_draw_normal()
+
+            self.plot2d_draw_fast()
+
             for i in self.toolbars:
                 i.home()
-        if self.modelIsLoaded:
-            v, f, v_center = self.get_model_v_f_vc()
-
-            self.controls['axes']['3d'].mouse_init()
-            self.controls['axes']['3d'].view_init(elev=None, azim=None)
-            self.controls['axes']['3d'].set_xlim([v_center[0] - self.dxyz_lim,
-                                                  v_center[0] + self.dxyz_lim])
-            self.controls['axes']['3d'].set_ylim([v_center[1] - self.dxyz_lim,
-                                                  v_center[1] + self.dxyz_lim])
-            self.controls['axes']['3d'].set_zlim([v_center[2] - self.dxyz_lim,
-                                                  v_center[2] + self.dxyz_lim])
-            self.controls['canvases']['3d'].draw()
+        # if self.modelIsLoaded:
+        #     v, f, v_center = self.get_model_v_f_vc()
+        #
+        #     self.controls['axes']['3d'].mouse_init()
+        #     self.controls['axes']['3d'].view_init(elev=None, azim=None)
+        #     self.controls['axes']['3d'].set_xlim([v_center[0] - self.dxyz_lim,
+        #                                           v_center[0] + self.dxyz_lim])
+        #     self.controls['axes']['3d'].set_ylim([v_center[1] - self.dxyz_lim,
+        #                                           v_center[1] + self.dxyz_lim])
+        #     self.controls['axes']['3d'].set_zlim([v_center[2] - self.dxyz_lim,
+        #                                           v_center[2] + self.dxyz_lim])
+        #     self.controls['canvases']['3d'].draw()
         self.controls['buttons']['home'].clearFocus()
 
     def button_zoom_press(self, tostate=None):
@@ -2144,10 +1746,7 @@ class MainWindow(QMainWindow):
         if self.recordingIsLoaded:
             self.cameras[self.i_cam]["rotate"] = not self.cameras[self.i_cam]["rotate"]
 
-            if self.controls['status']['button_fastLabelingMode']:
-                self.plot2d_draw_fast()
-            else:
-                self.plot2d_draw_normal()
+            self.plot2d_draw_fast()
         else:
             print('WARNING: Recording needs to be loaded first')
         self.controls['buttons']['pan'].clearFocus()
@@ -2168,60 +1767,6 @@ class MainWindow(QMainWindow):
             print('WARNING: Recording needs to be loaded first')
         self.controls['buttons']['pan'].clearFocus()
 
-    def button_label3d_press(self):
-        if self.modelIsLoaded:
-            if not self.controls['status']['button_sketchMode']:
-                if not self.controls['status']['button_label3d']:
-                    self.controls['status']['label3d_select'] = False
-                    self.selectedLabel2d = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
-                    self.selectedLabel3d = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
-                    self.controls['lists']['labels3d'].setCurrentItem(None)
-                    self.controls['buttons']['label3d'].setStyleSheet("background-color: green;")
-                    self.controls['axes']['3d'].disable_mouse_rotation()
-                    self.cid = self.controls['canvases']['3d'].mpl_connect('button_press_event',
-                                                                           lambda event: self.plot3d_click(event))
-                else:
-                    self.controls['buttons']['label3d'].setStyleSheet("background-color: darkred;")
-                    self.controls['axes']['3d'].mouse_init()
-                    self.controls['figs']['3d'].canvas.mpl_disconnect(self.cid)
-                    #            self.clickedLabel3d = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
-                    self.controls['fields']['labels3d'].setText(str(''))
-                self.controls['status']['button_label3d'] = not self.controls['status']['button_label3d']
-            else:
-                print('WARNING: Sketch mode needs to be deactivated first')
-        else:
-            print('WARNING: Model needs to be loaded first')
-        self.controls['buttons']['label3d'].clearFocus()
-
-    def plot3d_click(self, event):
-        if event.button == 1:
-            x = event.xdata
-            y = event.ydata
-            if (x is not None) & (y is not None):
-                s = self.controls['axes']['3d'].format_coord(event.xdata, event.ydata)
-                s = s.split('=')
-                s = [i.split(',') for i in s[1:]]
-                xyz = [float(i[0]) for i in s]
-                xyz = np.array(xyz, dtype=np.float64)
-
-                M_proj = self.controls['axes']['3d'].get_proj()
-                x2, y2, _ = proj3d.proj_transform(xyz[0], xyz[1], xyz[2],
-                                                  M_proj)
-                xv2, yv2, _ = proj3d.proj_transform(self.v[:, 0], self.v[:, 1], self.v[:, 2],
-                                                    M_proj)
-
-                diff = np.array([xv2 - x2, yv2 - y2], dtype=np.float64).T
-                dist = np.sqrt(np.sum(diff ** 2, 1))
-                self.selectedLabel3d = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
-                self.clickedLabel3d = self.v[dist == np.min(dist)].squeeze()
-                self.plot3d_update()
-                self.controls['axes']['3d'].plot([self.clickedLabel3d[0]],
-                                                 [self.clickedLabel3d[1]],
-                                                 [self.clickedLabel3d[2]],
-                                                 marker='o',
-                                                 color='darkgreen')
-                self.controls['canvases']['3d'].draw()
-
     def sketch_click(self, event):
         if event.button == 1:
             x = event.xdata
@@ -2230,57 +1775,56 @@ class MainWindow(QMainWindow):
                 label_coordinates = self.get_sketch_label_coordinates()
                 dists = ((x - label_coordinates[:, 0]) ** 2 + (y - label_coordinates[:, 1]) ** 2) ** 0.5
                 label_index = np.argmin(dists)
-                label_name = self.labels3d_sequence[label_index]
-                sorted_index = sorted(list(self.labels3d.keys())).index(label_name)
-                self.controls['lists']['labels3d'].setCurrentRow(sorted_index)
-                self.list_labels3d_select()
+                self.controls['lists']['labels'].setCurrentRow(label_index)
+                self.list_labels_select()
 
     # this works correctly but implementation is somewhat messed up
     # (rows are dimensions and not the columns, c.f. commented plotting command)
     def plot3d_move_center(self, move_direc):
-        x_lim = self.controls['axes']['3d'].get_xlim()
-        y_lim = self.controls['axes']['3d'].get_ylim()
-        z_lim = self.controls['axes']['3d'].get_zlim()
-        center = np.array([np.mean(x_lim),
-                           np.mean(y_lim),
-                           np.mean(z_lim)], dtype=np.float64)
-        dxzy_lim = np.mean([np.abs(center[0] - x_lim),
-                            np.abs(center[1] - y_lim),
-                            np.abs(center[2] - z_lim)])
-
-        azim = self.controls['axes']['3d'].azim / 180 * np.pi + np.pi
-        elev = self.controls['axes']['3d'].elev / 180 * np.pi
-
-        r_azim = np.array([0.0, 0.0, -azim], dtype=np.float64)
-        R_azim = rodrigues2rotmat_single(r_azim)
-
-        r_elev = np.array([0.0, -elev, 0.0], dtype=np.float64)
-        R_elev = rodrigues2rotmat_single(r_elev)
-
-        R_azim_elev = np.dot(R_elev, R_azim)
-
-        #        coord = center + R_azim_elev * 0.1
-        #        label = ['x', 'y', 'z']
-        #        for i in range(3):
-        #            self.controls['axes']['3d'].plot([center[0], coord[i, 0]],
-        #                           [center[1], coord[i, 1]],
-        #                           [center[2], coord[i, 2]],
-        #                           linestyle='-',
-        #                           color='green')
-        #            self.controls['axes']['3d'].text(coord[i, 0],
-        #                           coord[i, 1],
-        #                           coord[i, 2],
-        #                           label[i],
-        #                           color='red')
-
-        center_new = center + np.sign(move_direc) * R_azim_elev[np.abs(move_direc), :] * self.dxyz
-        self.controls['axes']['3d'].set_xlim([center_new[0] - dxzy_lim,
-                                              center_new[0] + dxzy_lim])
-        self.controls['axes']['3d'].set_ylim([center_new[1] - dxzy_lim,
-                                              center_new[1] + dxzy_lim])
-        self.controls['axes']['3d'].set_zlim([center_new[2] - dxzy_lim,
-                                              center_new[2] + dxzy_lim])
-        self.controls['canvases']['3d'].draw()
+        return
+        # x_lim = self.controls['axes']['3d'].get_xlim()
+        # y_lim = self.controls['axes']['3d'].get_ylim()
+        # z_lim = self.controls['axes']['3d'].get_zlim()
+        # center = np.array([np.mean(x_lim),
+        #                    np.mean(y_lim),
+        #                    np.mean(z_lim)], dtype=np.float64)
+        # dxzy_lim = np.mean([np.abs(center[0] - x_lim),
+        #                     np.abs(center[1] - y_lim),
+        #                     np.abs(center[2] - z_lim)])
+        #
+        # azim = self.controls['axes']['3d'].azim / 180 * np.pi + np.pi
+        # elev = self.controls['axes']['3d'].elev / 180 * np.pi
+        #
+        # r_azim = np.array([0.0, 0.0, -azim], dtype=np.float64)
+        # R_azim = rodrigues2rotmat_single(r_azim)
+        #
+        # r_elev = np.array([0.0, -elev, 0.0], dtype=np.float64)
+        # R_elev = rodrigues2rotmat_single(r_elev)
+        #
+        # R_azim_elev = np.dot(R_elev, R_azim)
+        #
+        # #        coord = center + R_azim_elev * 0.1
+        # #        label = ['x', 'y', 'z']
+        # #        for i in range(3):
+        # #            self.controls['axes']['3d'].plot([center[0], coord[i, 0]],
+        # #                           [center[1], coord[i, 1]],
+        # #                           [center[2], coord[i, 2]],
+        # #                           linestyle='-',
+        # #                           color='green')
+        # #            self.controls['axes']['3d'].text(coord[i, 0],
+        # #                           coord[i, 1],
+        # #                           coord[i, 2],
+        # #                           label[i],
+        # #                           color='red')
+        #
+        # center_new = center + np.sign(move_direc) * R_azim_elev[np.abs(move_direc), :] * self.dxyz
+        # self.controls['axes']['3d'].set_xlim([center_new[0] - dxzy_lim,
+        #                                       center_new[0] + dxzy_lim])
+        # self.controls['axes']['3d'].set_ylim([center_new[1] - dxzy_lim,
+        #                                       center_new[1] + dxzy_lim])
+        # self.controls['axes']['3d'].set_zlim([center_new[2] - dxzy_lim,
+        #                                       center_new[2] + dxzy_lim])
+        # self.controls['canvases']['3d'].draw()
 
     def button_up_press(self):
         move_direc = +2
@@ -2314,42 +1858,29 @@ class MainWindow(QMainWindow):
         self.controls['fields']['dxyz'].clearFocus()
 
     def button_next_label_press(self):
-        if self.controls['status']['label3d_select']:
-            selected_label_name = self.controls['lists']['labels3d'].currentItem().text()
-            selected_label_index = self.labels3d_sequence.index(selected_label_name)
-            next_label_index = selected_label_index + 1
-            if next_label_index >= np.size(self.labels3d_sequence):
-                next_label_index = 0
-            next_label_name = self.labels3d_sequence[next_label_index]
-            sorted_index = sorted(list(self.labels3d.keys())).index(next_label_name)
-            self.controls['lists']['labels3d'].setCurrentRow(sorted_index)
-            self.list_labels3d_select()
-        self.controls['buttons']['next_label'].clearFocus()
+        self.change_label(1)
 
     def button_previous_label_press(self):
-        if self.controls['status']['label3d_select']:
-            selected_label_name = self.controls['lists']['labels3d'].currentItem().text()
-            selected_label_index = self.labels3d_sequence.index(selected_label_name)
-            previous_label_index = selected_label_index - 1
-            if previous_label_index < 0:
-                previous_label_index = np.size(self.labels3d_sequence) - 1
-            previous_label_name = self.labels3d_sequence[previous_label_index]
-            sorted_index = sorted(list(self.labels3d.keys())).index(previous_label_name)
-            self.controls['lists']['labels3d'].setCurrentRow(sorted_index)
-            self.list_labels3d_select()
-        self.controls['buttons']['previous_label'].clearFocus()
+        self.change_label(-1)
+
+    def change_label(self, d_label_idx):
+        selected_label_name = self.get_current_label()
+        selected_label_index = list(self.labels['labels'].keys()).index(selected_label_name)
+        next_label_index = selected_label_index + d_label_idx
+        if next_label_index >= np.size(list(self.labels['labels'].keys())):
+            next_label_index = 0
+        elif next_label_index < 0:
+            next_label_index = np.size(list(self.labels['labels'].keys())) - 1
+        self.controls['lists']['labels'].setCurrentRow(next_label_index)
+        self.list_labels_select()
+        self.controls['buttons']['next_label'].clearFocus()
 
     def button_next_press(self):
-        if bool(self.labels2d):
-            self.labels2d_all[self.get_pose_idx()] = copy.deepcopy(self.labels2d)
         self.set_pose_idx(self.get_pose_idx() + self.dFrame)
         self.plot2d_change_frame()
         self.controls['buttons']['next'].clearFocus()
 
     def button_previous_press(self):
-        if bool(self.labels2d):
-            self.labels2d_all[self.get_pose_idx()] = copy.deepcopy(self.labels2d)
-
         self.set_pose_idx(self.get_pose_idx() - self.dFrame)
         self.plot2d_change_frame()
         self.controls['buttons']['previous'].clearFocus()
@@ -2367,12 +1898,12 @@ class MainWindow(QMainWindow):
             self.set_pose_idx(self.controls['fields']['current_pose'].text())
             self.plot2d_change_frame()
         self.controls['fields']['current_pose'].setText(str(self.get_pose_idx()))
-        if self.controls['status']['button_sketchMode']:
-            first_label_name = self.labels3d_sequence[0]
-            sorted_index = sorted(list(self.labels3d.keys())).index(first_label_name)
-            self.controls['lists']['labels3d'].setCurrentRow(sorted_index)
-            self.list_labels3d_select()
-            self.sketch_update()
+
+        first_label_name = list(self.labels['labels'].keys())[0]
+        sorted_index = sorted(list(self.labels3d.keys())).index(first_label_name)
+        self.controls['lists']['labels'].setCurrentRow(sorted_index)
+        self.list_labels_select()
+        self.sketch_update()
         self.controls['fields']['current_pose'].clearFocus()
 
     def field_d_frame_change(self):
@@ -2393,37 +1924,15 @@ class MainWindow(QMainWindow):
         self.controls['fields']['d_frame'].clearFocus()
 
     def plot2d_change_frame(self):
-        if self.controls['status']['button_fastLabelingMode']:
-            self.cameras[self.i_cam]['x_lim_prev'] = self.controls['axes']['2d'][self.i_cam].get_xlim()
-            self.cameras[self.i_cam]['y_lim_prev'] = self.controls['axes']['2d'][self.i_cam].get_ylim()  # [::-1]
-        else:
-            for i_cam in range(len(self.cameras)):
-                self.cameras[i_cam]['x_lim_prev'] = self.controls['axes']['2d'][i_cam].get_xlim()
-                self.cameras[i_cam]['y_lim_prev'] = self.controls['axes']['2d'][i_cam].get_ylim()  # [::-1]
-        if np.abs(self.clickedLabel2d_pose - self.get_pose_idx()) > self.dFrame:
-            self.clickedLabel2d = np.array([np.nan, np.nan], dtype=np.float64)
-        self.selectedLabel2d = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
+        for i_cam in range(len(self.cameras)):
+            self.cameras[i_cam]['x_lim_prev'] = self.controls['axes']['2d'].get_xlim()
+            self.cameras[i_cam]['y_lim_prev'] = self.controls['axes']['2d'].get_ylim()  # [::-1]
+
         self.controls['fields']['current_pose'].setText(str(self.get_pose_idx()))
-        if self.get_pose_idx() in self.labels2d_all.keys():
-            self.labels2d = copy.deepcopy(self.labels2d_all[self.get_pose_idx()])
-        else:
-            self.labels2d = dict()
-        if self.controls['status']['label3d_select']:
-            label_name = self.controls['lists']['labels3d'].currentItem().text()
-            if label_name in self.labels2d.keys():
-                self.selectedLabel2d = np.copy(self.labels2d[label_name])
-        if self.controls['status']['button_sketchMode']:
-            first_label_name = self.labels3d_sequence[0]
-            sorted_index = sorted(list(self.labels3d.keys())).index(first_label_name)
-            self.controls['lists']['labels3d'].setCurrentRow(sorted_index)
-            self.list_labels3d_select()
-            self.sketch_update()
-        else:
-            self.plot3d_update()
-        if self.controls['status']['button_fastLabelingMode']:
-            self.plot2d_draw_fast()
-        else:
-            self.plot2d_draw_normal()
+        self.list_labels_select()
+        self.sketch_update()
+
+        self.plot2d_draw_fast()
 
     def closeEvent(self, event):
         if self.cfg['exitSaveModel']:
@@ -2456,7 +1965,8 @@ class MainWindow(QMainWindow):
             elif self.cfg['button_pan'] and event.key() == Qt.Key_R:
                 self.button_rotate_press()
             elif self.cfg['button_label3d'] and event.key() == Qt.Key_L:
-                self.button_label3d_press()
+                pass
+                # self.button_label3d_press()
             elif self.cfg['button_up'] and event.key() == Qt.Key_Up:
                 self.button_up_press()
             elif self.cfg['button_down'] and event.key() == Qt.Key_Down:
@@ -2498,6 +2008,7 @@ class MainWindow(QMainWindow):
             print('WARNING: Auto-repeat is not supported')
 
 
+# noinspection PyUnusedLocal
 def main(drive: Path, config_file=None, master=True):
     app = QApplication(sys.argv)
     window = MainWindow(drive=drive, file_config=config_file, master=master)
