@@ -27,5 +27,5 @@ setup(
     ],
     packages=['ACMtraingui'],
     include_package_data=True,
-    install_requires=["numpy"],
+    install_requires=["numpy", "matplotlib", "imageio", "bbo_ccvtools", "PyQt5"],
 )
