@@ -34,8 +34,9 @@ import imageio
 from ccvtools import rawio
 
 from ACMtraingui.config import load_cfg, save_cfg
+from ACMtraingui.helper_gui import update_button_stylesheet, disable_button, get_button_status, toggle_button
 from ACMtraingui.select_user import SelectUserWindow
-from ACMtraingui.video_helper import read_video_meta
+from ACMtraingui.helper_video import read_video_meta
 
 
 class MainWindow(QMainWindow):
@@ -90,6 +91,7 @@ class MainWindow(QMainWindow):
         # Controls
         self.controls = {
             'canvases': {},
+            'toolbars': {},
             'figs': {},
             'axes': {},
             'plots': {},
@@ -100,10 +102,6 @@ class MainWindow(QMainWindow):
             'labels': {},
             'buttons': {},
             'texts': {},
-            'status': {  # control statuses - FIXME: should be derived from buttons with method
-                'toolbars_zoom': False,
-                'toolbars_pan': False,
-            }
         }
 
         self.labels = {
@@ -116,9 +114,6 @@ class MainWindow(QMainWindow):
         self.sketch_zoom_dy = None
         self.sketch_zoom_dx = None
         self.sketch_zoom_scale = 0.1
-
-        # Toolbars
-        self.toolbars = list()
 
         self.dx = int(128)
         self.dy = int(128)
@@ -133,7 +128,6 @@ class MainWindow(QMainWindow):
         self.i_cam = self.cfg['cam']
 
         self.colors = []
-
         self.init_colors()
 
         self.autoSaveCounter = int(0)
@@ -394,7 +388,6 @@ class MainWindow(QMainWindow):
         frame_main.setLayout(layout_grid)
         self.setCentralWidget(frame_main)
 
-
     def get_current_label(self):
         current_label_item = self.controls['lists']['labels'].currentItem()
         if current_label_item is not None:
@@ -409,11 +402,6 @@ class MainWindow(QMainWindow):
             self.controls['grids']['views2d'].removeWidget(widget_to_remove)
             widget_to_remove.setParent(None)
 
-        if self.controls['status']['toolbars_zoom']:
-            self.button_zoom_press()
-        if self.controls['status']['toolbars_pan']:
-            self.button_pan_press()
-
         fig = Figure(tight_layout=True)
         fig.clear()
         self.controls['figs']['2d'] = fig
@@ -425,20 +413,30 @@ class MainWindow(QMainWindow):
         self.plot2d_plot(self.controls['axes']['2d'], self.i_cam)
 
         self.controls['grids']['views2d'].addWidget(canvas, 0, 0)
+        self.controls['toolbars']['views2d'] = NavigationToolbar2QT(canvas, self)
+        release_zoom_callback = self.controls['toolbars']['views2d'].release_zoom
 
-        toolbar = NavigationToolbar2QT(canvas, self)
-        toolbar.hide()
-        self.toolbars = list([toolbar])
+        def rzc(*args, **kwargs):
+            release_zoom_callback(*args, **kwargs)
+            self.disable_zoom()
+
+        self.controls['toolbars']['views2d'].release_zoom = rzc
+        self.controls['toolbars']['views2d'].hide()
 
         self.controls['frames']['views2d'].setCursor(QCursor(QtCore.Qt.CrossCursor))
+
+        if get_button_status(self.controls['buttons']['zoom']):
+            self.button_zoom_press()
+        if get_button_status(self.controls['buttons']['pan']):
+            self.button_pan_press()
 
         fig.canvas.mpl_connect('button_press_event',
                                lambda event: self.plot2d_click(event))
 
     def plot2d_draw(self):
-        if self.controls['status']['toolbars_zoom']:
+        if get_button_status(self.controls['buttons']['zoom']):
             self.button_zoom_press()
-        if self.controls['status']['toolbars_pan']:
+        if get_button_status(self.controls['buttons']['pan']):
             self.button_pan_press()
 
         self.plot2d_plot(self.controls['axes']['2d'], self.i_cam)
@@ -522,7 +520,8 @@ class MainWindow(QMainWindow):
                                                                )[0]
 
     def plot2d_click(self, event):
-        if not self.controls['status']['toolbars_zoom'] and not self.controls['status']['toolbars_pan']:
+        if not (get_button_status(self.controls['buttons']['zoom']) or
+                get_button_status(self.controls['buttons']['pan'])):
             ax = event.inaxes
 
             # Initialize array
@@ -697,7 +696,6 @@ class MainWindow(QMainWindow):
         self.controls['axes']['sketch_zoom'].invert_yaxis()
 
         self.controls['canvases']['sketch'].draw()
-        self.button_zoom_press(tostate=["off"])
 
     # controls
     def set_controls(self):
@@ -956,7 +954,8 @@ class MainWindow(QMainWindow):
         col = 0
 
         button_zoom = QPushButton('Zoom (Z)')
-        button_zoom.setStyleSheet("background-color: darkred;")
+        button_zoom.setCheckable(True)
+        update_button_stylesheet(button_zoom)
         button_zoom.clicked.connect(self.button_zoom_press)
         controls_layout_grid.addWidget(button_zoom, row, col)
         button_zoom.setEnabled(self.cfg['button_zoom'])
@@ -964,7 +963,8 @@ class MainWindow(QMainWindow):
         col = col + 1
 
         button_pan = QPushButton('Pan (W)')
-        button_pan.setStyleSheet("background-color: darkred;")
+        button_pan.setCheckable(True)
+        update_button_stylesheet(button_pan)
         button_pan.clicked.connect(self.button_pan_press)
         controls_layout_grid.addWidget(button_pan, row, col)
         controls['buttons']['pan'] = button_pan
@@ -990,7 +990,6 @@ class MainWindow(QMainWindow):
                                                    options=dialog_options)
         if file_name:
             self.load_calibrations(Path(file_name))
-            self.controls['buttons']['load_calibration'].setStyleSheet("background-color: green;")
             print('Loaded calibration ({:s})'.format(file_name))
         self.controls['buttons']['load_calibration'].clearFocus()
 
@@ -1079,47 +1078,27 @@ class MainWindow(QMainWindow):
     def button_home_press(self):
         if self.recordingIsLoaded:
             self.zoom_reset()
+            self.disable_pan()
+            self.disable_zoom()
 
             self.plot2d_draw()
 
-            for i in self.toolbars:
-                i.home()
-        # if self.modelIsLoaded:
-        #     v, f, v_center = self.get_model_v_f_vc()
-        #
-        #     self.controls['axes']['3d'].mouse_init()
-        #     self.controls['axes']['3d'].view_init(elev=None, azim=None)
-        #     self.controls['axes']['3d'].set_xlim([v_center[0] - self.dxyz_lim,
-        #                                           v_center[0] + self.dxyz_lim])
-        #     self.controls['axes']['3d'].set_ylim([v_center[1] - self.dxyz_lim,
-        #                                           v_center[1] + self.dxyz_lim])
-        #     self.controls['axes']['3d'].set_zlim([v_center[2] - self.dxyz_lim,
-        #                                           v_center[2] + self.dxyz_lim])
-        #     self.controls['canvases']['3d'].draw()
+            self.controls['toolbars']['views2d'].home()
         self.controls['buttons']['home'].clearFocus()
 
-    def button_zoom_press(self, tostate=None):
-        if tostate is None or tostate is False:
-            tostate = ["on", "off"]
-
-        if self.controls['status']['toolbars_zoom'] and "off" not in tostate:
-            return
-        if not self.controls['status']['toolbars_zoom'] and "on" not in tostate:
-            return
-
+    def button_zoom_press(self):
         if self.recordingIsLoaded:
-            if not self.controls['status']['toolbars_zoom']:
-                self.controls['buttons']['zoom'].setStyleSheet("background-color: green;")
-            else:
-                self.controls['buttons']['zoom'].setStyleSheet("background-color: darkred;")
-            if self.controls['status']['toolbars_pan']:
-                self.button_pan_press()
-            for i in self.toolbars:
-                i.zoom()
-            self.controls['status']['toolbars_zoom'] = not self.controls['status']['toolbars_zoom']
+            update_button_stylesheet(self.controls['buttons']['zoom'])
+            self.disable_pan()
+            self.controls['toolbars']['views2d'].zoom()
         else:
             print('WARNING: Recording needs to be loaded first')
         self.controls['buttons']['zoom'].clearFocus()
+
+    def disable_pan(self):
+        if get_button_status(self.controls['buttons']['pan']):
+            disable_button(self.controls['buttons']['pan'])
+            self.controls['toolbars']['views2d'].pan()
 
     def button_rotate_press(self):
         if self.recordingIsLoaded:
@@ -1132,18 +1111,17 @@ class MainWindow(QMainWindow):
 
     def button_pan_press(self):
         if self.recordingIsLoaded:
-            if not self.controls['status']['toolbars_pan']:
-                self.controls['buttons']['pan'].setStyleSheet("background-color: green;")
-            else:
-                self.controls['buttons']['pan'].setStyleSheet("background-color: darkred;")
-            if self.controls['status']['toolbars_zoom']:
-                self.button_zoom_press()
-            for i in self.toolbars:
-                i.pan()
-            self.controls['status']['toolbars_pan'] = not self.controls['status']['toolbars_pan']
+            update_button_stylesheet(self.controls['buttons']['pan'])
+            self.disable_zoom()
+            self.controls['toolbars']['views2d'].pan()
         else:
             print('WARNING: Recording needs to be loaded first')
         self.controls['buttons']['pan'].clearFocus()
+
+    def disable_zoom(self):
+        if get_button_status(self.controls['buttons']['zoom']):
+            disable_button(self.controls['buttons']['zoom'])
+            self.controls['toolbars']['views2d'].zoom()
 
     def sketch_click(self, event):
         if event.button == 1:
@@ -1343,8 +1321,10 @@ class MainWindow(QMainWindow):
             elif self.cfg['button_home'] and event.key() == Qt.Key_H:
                 self.button_home_press()
             elif self.cfg['button_zoom'] and event.key() == Qt.Key_Z:
+                toggle_button(self.controls['buttons']['zoom'])
                 self.button_zoom_press()
             elif self.cfg['button_pan'] and event.key() == Qt.Key_W:
+                toggle_button(self.controls['buttons']['pan'])
                 self.button_pan_press()
             elif self.cfg['button_pan'] and event.key() == Qt.Key_R:
                 self.button_rotate_press()
