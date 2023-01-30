@@ -1,6 +1,7 @@
 from pathlib import Path
 import os  # Required for eval below :(
 
+
 def load_cfg(path):
     with open(path, 'r') as cfg_file:
         configtxt = cfg_file.read()
