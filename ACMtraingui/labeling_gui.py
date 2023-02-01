@@ -447,9 +447,10 @@ class MainWindow(QMainWindow):
     def plot2d_plot(self, ax, i_cam):
         reader = self.cameras[i_cam]["reader"]
 
-        # Requesting adjacent frames seems to yield wrong frames ... jumping back to 0 for now
-        # TODO: Clean solution.
-        img = reader.get_data(0)
+        # Only subsequent frames seem to come up correctly
+        # TODO: Implement only loading the previous frame if it wasnt loaded directly before?
+        if self.pose_idx>0:
+            img = reader.get_data(self.pose_idx-1)
         img = reader.get_data(self.pose_idx)
 
         if self.controls['plots']['image2d'] is None:
