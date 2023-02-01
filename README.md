@@ -18,18 +18,14 @@ GUI to label frames for training of ACM-dlcdetect, by Arne Monsees
 3. Run with `python -m ACMtraingui [options ...]`
 
 ## Options
-### Assistant mode
+### Labeling mode
 Run with `python -m ACMtraingui [base data directory]`.
 This starts a GUI in drone mode, for the use by assistants with limited options to influence how the program runs and were it saves. This expects the following file structure:
 ```
-[base data directory]/data/users/{user1,user2,...}/labeling_gui_cfg.py
-[base data directory]/users/
+[base data directory]/pose/data/users/{user1,user2,...}/labeling_gui_cfg.py
+[base data directory]/pose/users/
 ```
 {user1,user2,...} will be presented in a selection dialog on startup. Marking results will be placed in `[base data directory]/users/`
-
-### Master mode
-Run with `python -m ACMtraingui [configdir] --master`.
-This starts a GUI in master mode. Only do this if you know what you are doing.
 
 ### Check mode
 Run with 
