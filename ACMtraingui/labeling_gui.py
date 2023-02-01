@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import hashlib
+
 import numpy as np
 import os
 import sys
@@ -444,6 +446,10 @@ class MainWindow(QMainWindow):
 
     def plot2d_plot(self, ax, i_cam):
         reader = self.cameras[i_cam]["reader"]
+
+        # Requesting adjacent frames seems to yield wrong frames ... jumping back to 0 for now
+        # TODO: Clean solution.
+        img = reader.get_data(0)
         img = reader.get_data(self.pose_idx)
 
         if self.controls['plots']['image2d'] is None:
@@ -452,12 +458,14 @@ class MainWindow(QMainWindow):
                                                           cmap='gray',
                                                           vmin=self.vmin,
                                                           vmax=self.vmax)
+            print(f"img {self.pose_idx}: {hashlib.md5(img).hexdigest()}")
             ax.legend('',
                       facecolor=self.colors[i_cam % np.size(self.colors)],
                       loc='upper left',
                       bbox_to_anchor=(0, 1))
             ax.axis('off')
         else:
+            print(f"img u {self.pose_idx}: {hashlib.md5(img).hexdigest()}")
             self.controls['plots']['image2d'].set_array(img)
             self.controls['plots']['image2d'].set_clim(self.vmin, self.vmax)
 
@@ -471,7 +479,7 @@ class MainWindow(QMainWindow):
         if self.cfg['invert_yaxis']:
             ax.invert_yaxis()
         if self.cameras[i_cam]["rotate"]:
-            ax.invert_xaxis()  # Does calling this twice flip back?
+            ax.invert_xaxis()
             ax.invert_yaxis()
         #
         self.plot2d_draw_labels(ax)
@@ -513,11 +521,12 @@ class MainWindow(QMainWindow):
                     'markersize': 3,
                     'zorder': 2,
                 }
-
+            print(f"label {label_name} {frame_idx}: {point}")
             self.controls['plots']['2d'][label_name] = ax.plot([point[0]], [point[1]],
                                                                marker='o',
                                                                **plotparams,
                                                                )[0]
+        print("=============")
 
     def plot2d_click(self, event):
         if not (get_button_status(self.controls['buttons']['zoom']) or
@@ -1104,7 +1113,9 @@ class MainWindow(QMainWindow):
         if self.recordingIsLoaded:
             self.cameras[self.i_cam]["rotate"] = not self.cameras[self.i_cam]["rotate"]
 
-            self.plot2d_draw()
+            self.controls['axes']['2d'].invert_xaxis()
+            self.controls['axes']['2d'].invert_yaxis()
+            self.controls['figs']['2d'].canvas.draw()
         else:
             print('WARNING: Recording needs to be loaded first')
         self.controls['buttons']['pan'].clearFocus()
