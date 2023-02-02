@@ -31,14 +31,13 @@ from matplotlib.figure import Figure
 
 from pathlib import Path
 
-import imageio
-# noinspection PyUnresolvedReferences
-from ccvtools import rawio
+from tqdm.gui import tqdm
 
 from ACMtraingui.config import load_cfg, save_cfg
 from ACMtraingui.helper_gui import update_button_stylesheet, disable_button, get_button_status, toggle_button
 from ACMtraingui.select_user import SelectUserWindow
 from ACMtraingui.helper_video import read_video_meta
+from svidreader import SVidReader
 
 
 class MainWindow(QMainWindow):
@@ -268,7 +267,7 @@ class MainWindow(QMainWindow):
             cameras = []
             for file_name in names:
                 if file_name:
-                    reader = imageio.get_reader(file_name)
+                    reader = SVidReader(file_name, hash_iterator=tqdm)
                     header = read_video_meta(reader)
                     cam = {
                         'file_name': file_name,
