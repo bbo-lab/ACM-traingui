@@ -3,9 +3,6 @@ import numpy as np
 
 def read_video_meta(reader):
     header = reader.get_meta_data()
-    header['nFrames'] = len(reader)  # len() may be Inf for formats where counting frames can be expensive
-    if 1000000000000000 < header['nFrames']:
-        header['nFrames'] = reader.count_frames()
 
     # Add required headers that are not normally part of standard video formats but are required information
     if "sensor" in header:

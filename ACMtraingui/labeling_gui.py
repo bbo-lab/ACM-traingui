@@ -267,8 +267,11 @@ class MainWindow(QMainWindow):
             cameras = []
             for file_name in names:
                 if file_name:
+                    print(file_name)
                     reader = SVidReader(file_name, hash_iterator=tqdm)
+                    print(1)
                     header = read_video_meta(reader)
+                    print(2)
                     cam = {
                         'file_name': file_name,
                         'reader': reader,
