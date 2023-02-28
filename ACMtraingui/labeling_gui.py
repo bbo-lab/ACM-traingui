@@ -411,7 +411,7 @@ class MainWindow(QMainWindow):
         self.controls['figs']['2d'] = fig
         canvas = FigureCanvasQTAgg(fig)
         canvas.setParent(self.controls['frames']['views2d'])
-        ax = fig.add_subplot('111')
+        ax = fig.add_subplot(111)
         ax.clear()
         self.controls['axes']['2d'] = ax
         self.plot2d_plot(self.controls['axes']['2d'], self.i_cam)
