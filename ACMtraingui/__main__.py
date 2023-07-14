@@ -108,6 +108,7 @@ def main():
                     for f in l["labels"]:
                         if frame_idx in l["labels"][f]:
                             target_labels["labels"][f][frame_idx] = l["labels"][f][frame_idx]
+        target_labels["labeler_list"] = labeler
         np.savez(target_file, target_labels)
 
     elif args.check is not None:
