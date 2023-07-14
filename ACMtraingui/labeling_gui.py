@@ -114,7 +114,10 @@ class MainWindow(QMainWindow):
         # Sketch zoom stuff
         self.sketch_zoom_dy = None
         self.sketch_zoom_dx = None
-        self.sketch_zoom_scale = 0.1
+        if 'sketchZoomScale' in self.cfg
+            self.sketch_zoom_scale = self.cfg['sketchZoomScale']
+        else:
+            self.sketch_zoom_scale = 0.1
 
         self.dx = int(128)
         self.dy = int(128)
