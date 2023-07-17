@@ -553,6 +553,8 @@ class MainWindow(QMainWindow):
                 self.labels['labels'][label_name][frame_idx] = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
                 self.labels['fr_times'][frame_idx] = time.time()
 
+            if 'labeler' not in self.labels:
+                self.labels['labeler'] = {}
             if "labeler_list" not in self.labels:
                 self.labels["labeler_list"] = []
 
