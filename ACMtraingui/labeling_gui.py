@@ -108,13 +108,15 @@ class MainWindow(QMainWindow):
         self.labels = {
             'labels': {},
             'fr_times': {},
-            'version': 0.2,
+            'labeler_list': [],
+            'labeler': {},
+            'version': 0.3,
         }
 
         # Sketch zoom stuff
         self.sketch_zoom_dy = None
         self.sketch_zoom_dx = None
-        if 'sketchZoomScale' in self.cfg
+        if 'sketchZoomScale' in self.cfg:
             self.sketch_zoom_scale = self.cfg['sketchZoomScale']
         else:
             self.sketch_zoom_scale = 0.1
@@ -550,6 +552,11 @@ class MainWindow(QMainWindow):
             if frame_idx not in self.labels['labels'][label_name]:
                 self.labels['labels'][label_name][frame_idx] = np.full((len(self.cameras), 2), np.nan, dtype=np.float64)
                 self.labels['fr_times'][frame_idx] = time.time()
+
+            if self.user not in self.labels["labeler_list"]:
+                self.labels["labeler_list"].append(self.user)
+
+            self.labels['labeler'][frame_idx] = self.labels["labeler_list"].index(self.user)
 
             if ax is not None:
                 # Left mouse - create
