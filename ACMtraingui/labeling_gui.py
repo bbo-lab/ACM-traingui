@@ -106,13 +106,7 @@ class MainWindow(QMainWindow):
             'texts': {},
         }
 
-        self.labels = {
-            'labels': {},
-            'fr_times': {},
-            'labeler_list': [],
-            'labeler': {},
-            'version': label_data.version,
-        }
+        self.labels = label_data.get_empty_labels()
 
         # Sketch zoom stuff
         self.sketch_zoom_dy = None

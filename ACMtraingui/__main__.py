@@ -17,6 +17,9 @@ def main():
                              "config file")
     parser.add_argument('--merge', type=str, required=False, nargs='*', default=None,
                         help="If given, merges given labes.npz into labels.npz file specified in INPUT_PATH")
+    parser.add_argument('--combine_cams', type=str, required=False, nargs='*', default=None,
+                        help="If given, merges given labes.npz into a labels.npz file specified in INPUT_PATH, "
+                             "where each labels file stands for a separate camera. 'None' serves as a placeholder.")
     parser.add_argument('--strict', required=False, action="store_true",
                         help="With --labels, merges only frames where frames were labeled in all cameras")
     parser.add_argument('--check', type=str, required=False, nargs='?', default=None, const='-',
@@ -31,9 +34,9 @@ def main():
     print(input_path)
 
     if args.merge is not None:
-        target_file = Path(input_path).expanduser().resolve()
-        labels_list = [Path(labels_file).expanduser().resolve() for labels_file in args.merge]
-        label_data.merge(labels_list, target_file=target_file)
+        label_data.merge(args.merge, target_file=input_path)
+    elif args.combine_cams is not None:
+        label_data.combine_cams(args.combine_cams, target_file=input_path)
     elif args.check is not None:
         check.check_triangulation_error(args.check, input_path)
     elif args.master:
