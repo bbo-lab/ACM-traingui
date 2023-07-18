@@ -704,8 +704,9 @@ class MainWindow(QMainWindow):
         label_names = list(self.labels['labels'].keys())
 
         for label_name in label_names:
-            self.controls['labels']['sketch'][label_name].set(color='orange')
-            self.controls['labels']['sketch_zoom'][label_name].set(color='orange')
+            if label_name in self.controls['labels']['sketch']:
+                self.controls['labels']['sketch'][label_name].set(color='orange')
+                self.controls['labels']['sketch_zoom'][label_name].set(color='orange')
 
         current_label_name = self.get_current_label()
         if current_label_name is None or current_label_name not in sketch_labels:
@@ -852,7 +853,7 @@ class MainWindow(QMainWindow):
 
         list_labels = QListWidget()
         # list_labels.setSortingEnabled(True)
-        list_labels.addItems(list(self.labels['labels'].keys()))
+        list_labels.addItems(self.get_sketch_labels())
         list_labels.setSelectionMode(QAbstractItemView.SingleSelection)
         list_labels.itemClicked.connect(self.list_labels_select)
         controls_layout_grid.addWidget(list_labels, row, col, 3, 2)
