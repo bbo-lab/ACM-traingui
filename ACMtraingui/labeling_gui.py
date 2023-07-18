@@ -33,6 +33,7 @@ from pathlib import Path
 
 from tqdm.gui import tqdm
 
+from ACMtraingui import label_data
 from ACMtraingui.config import load_cfg, save_cfg
 from ACMtraingui.helper_gui import update_button_stylesheet, disable_button, get_button_status, toggle_button
 from ACMtraingui.select_user import SelectUserWindow
@@ -110,7 +111,7 @@ class MainWindow(QMainWindow):
             'fr_times': {},
             'labeler_list': [],
             'labeler': {},
-            'version': 0.3,
+            'version': label_data.version,
         }
 
         # Sketch zoom stuff
