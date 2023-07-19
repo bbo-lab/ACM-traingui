@@ -1,8 +1,5 @@
 import argparse
 import os
-import sys
-import numpy as np
-import re
 from pathlib import Path
 from ACMtraingui import label_data
 from ACMtraingui import check

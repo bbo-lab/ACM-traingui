@@ -29,12 +29,24 @@ def update(labels, labeler="_unknown"):
     return labels
 
 
-def get_labeled_frame_idxs(labels):
-    labeled_frame_idxs = []
-    for label in labels["labels"]:
-        labeled_frame_idxs += list(labels["labels"][label].keys())
+def load(file_path):
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
+    labels = np.load(file_path, allow_pickle=True)["arr_0"][()]
 
-    return sorted(list(set(labeled_frame_idxs)))
+    return labels
+
+
+def get_labels(labels):
+    return list(labels["labels"].keys())
+
+
+def get_labeled_frame_idxs(labels):
+    frames = set()
+    for ln in labels["labels"]:
+        frames.update(set(labels["labels"][ln].keys()))
+
+    return sorted(list(frames))
 
 
 def merge(labels_list: list, labeler_list=None, target_file=None):
@@ -57,7 +69,7 @@ def merge(labels_list: list, labeler_list=None, target_file=None):
 
     # Load data from labels files
     if labels_files is not None:
-        labels_list = [np.load(lf.as_posix(), allow_pickle=True)["arr_0"][()] for lf in labels_files]
+        labels_list = [load(lf.as_posix()) for lf in labels_files]
 
         if labeler_list is None:
             labeler_list = [lf.parent.parent.name for lf in labels_files]
@@ -172,7 +184,7 @@ def combine_cams(labels_list: list, target_file=None):
             labels_list[i_l] = Path(label)
         if isinstance(label, Path):
             labels_list[i_l] = labels_list[i_l].expanduser().resolve()
-        labels_list[i_l] = np.load(labels_list[i_l].as_posix(), allow_pickle=True)["arr_0"][()]
+        labels_list[i_l] = load(labels_list[i_l].as_posix())
 
     # Update and copy
     labels_list = [update(labels.copy()) if labels is not None else None for labels in labels_list]
