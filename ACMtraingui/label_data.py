@@ -101,6 +101,8 @@ def merge(labels_list: list, labeler_list=None, target_file=None):
                 for f in ["fr_times", "labeler"]:
                     target_labels[f][frame_idx] = labels[f][frame_idx]
                 for label in labels["labels"]:
+                    if label not in target_labels["labels"]:
+                        target_labels["labels"][label] = {}
                     if frame_idx in labels["labels"][label]:
                         target_labels["labels"][label][frame_idx] = labels["labels"][label][frame_idx]
             else:
@@ -108,6 +110,9 @@ def merge(labels_list: list, labeler_list=None, target_file=None):
                     # Label not present for this frame in source
                     if frame_idx not in labels["labels"][label]:
                         continue
+
+                    if label not in target_labels["labels"]:
+                        target_labels["labels"][label] = {}
 
                     # Label not present for this frame in target, initialize
                     if frame_idx not in target_labels["labels"][label]:
@@ -142,6 +147,7 @@ def sort_dictionaries(target_labels):
         target_labels[f] = dict(sorted(target_labels[f].items()))
     for label in target_labels["labels"]:
         target_labels["labels"][label] = dict(sorted(target_labels["labels"][label].items()))
+    target_labels["labels"] = dict(sorted(target_labels["labels"].items()))
 
 
 def make_global_labeler_list(labels_list, labeler_list=None):
