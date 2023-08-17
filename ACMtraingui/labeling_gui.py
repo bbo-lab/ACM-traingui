@@ -558,9 +558,32 @@ class MainWindow(QMainWindow):
 
             self.labels['labeler'][frame_idx] = self.labels["labeler_list"].index(self.user)
 
+            modifiers = QApplication.keyboardModifiers()
+
             if ax is not None:
+                # Shift + Left mouse - select
+                if event.button == 1 and modifiers == QtCore.Qt.ShiftModifier:
+                    x = event.xdata
+                    y = event.ydata
+                    coords = np.array([x, y], dtype=np.float64)
+                    point_dists = []
+                    label_names = list(self.get_sketch_labels().keys())
+                    for ln in label_names:
+                        if ln in self.labels['labels'] and \
+                                frame_idx in self.labels['labels'][ln] and \
+                                len(self.labels['labels'][ln][frame_idx]) > cam_idx and \
+                                not np.any(np.isnan(self.labels['labels'][ln][frame_idx][cam_idx])):
+                            point_dists.append(
+                                np.linalg.norm(self.labels['labels'][ln][frame_idx][cam_idx] - coords))
+                        else:
+                            point_dists.append(1000000000)
+
+                    label_idx = point_dists.index(min(point_dists))
+                    self.controls['lists']['labels'].setCurrentRow(label_idx)
+                    self.list_labels_select()
+
                 # Left mouse - create
-                if event.button == 1:
+                elif event.button == 1:
                     x = event.xdata
                     y = event.ydata
                     if (x is not None) and (y is not None):

@@ -92,47 +92,42 @@ def merge(labels_list: list, labeler_list=None, target_file=None):
         # Create all necessary labels in target
         for label in labels["labels"]:
             if label not in target_labels["labels"]:
-                target_labels["labels"] = {}
+                target_labels["labels"][label] = {}
+            else:
+                pass
 
         # Walk through frames
         for frame_idx in get_labeled_frame_idxs(labels):
-            if frame_idx not in labeled_frame_idxs:
-                # Frame is not yet labeled, everything can be copied over
-                for f in ["fr_times", "labeler"]:
-                    target_labels[f][frame_idx] = labels[f][frame_idx]
-                for label in labels["labels"]:
-                    if label not in target_labels["labels"]:
-                        target_labels["labels"][label] = {}
-                    if frame_idx in labels["labels"][label]:
-                        target_labels["labels"][label][frame_idx] = labels["labels"][label][frame_idx]
-            else:
-                for label in labels["labels"]:
-                    # Label not present for this frame in source
-                    if frame_idx not in labels["labels"][label]:
-                        continue
+            for label in labels["labels"]:
+                # Label not present for this frame in source
+                if frame_idx not in labels["labels"][label]:
+                    continue
 
-                    if label not in target_labels["labels"]:
-                        target_labels["labels"][label] = {}
+                if label not in target_labels["labels"]:
+                    target_labels["labels"][label] = {}
 
-                    # Label not present for this frame in target, initialize
-                    if frame_idx not in target_labels["labels"][label]:
-                        target_labels["labels"][label][frame_idx] = \
-                            np.full(labels["labels"][label][frame_idx].shape, np.nan)
+                # Label not present for this frame in target, initialize
+                if frame_idx not in target_labels["labels"][label]:
+                    target_labels["labels"][label][frame_idx] = \
+                        np.full(labels["labels"][label][frame_idx].shape, np.nan)
 
-                    target_cam_mask = ~np.any(np.isnan(target_labels["labels"][label][frame_idx]), axis=1)
-                    source_cam_mask = ~np.any(np.isnan(labels["labels"][label][frame_idx]), axis=1)
-                    replace_mask = source_cam_mask
-                    if target_labels["fr_times"][frame_idx] > labels["fr_times"][frame_idx]:
-                        # Frame is newer in target
-                        replace_mask = np.logical_and(replace_mask, ~target_cam_mask)
-                    target_labels["labels"][label][frame_idx][replace_mask] = \
-                        labels["labels"][label][frame_idx][replace_mask]
+                target_cam_mask = ~np.any(np.isnan(target_labels["labels"][label][frame_idx]), axis=1)
+                source_cam_mask = ~np.any(np.isnan(labels["labels"][label][frame_idx]), axis=1)
+                replace_mask = source_cam_mask
+                if frame_idx not in target_labels["fr_times"] or target_labels["fr_times"][frame_idx] > labels["fr_times"][frame_idx]:
+                    # Frame is newer in target
+                    replace_mask = np.logical_and(replace_mask, ~target_cam_mask)
+                target_labels["labels"][label][frame_idx][replace_mask] = \
+                    labels["labels"][label][frame_idx][replace_mask]
 
-                if target_labels["labeler"][frame_idx] != labels["labeler"][frame_idx]:
-                    target_labels["labeler"][frame_idx] = labeler_list_all.index("_various")
+            if frame_idx not in target_labels["fr_times"]:
+                target_labels["labeler"][frame_idx] = labeler_list_all.index(
+                    labels["labeler_list"][labels["labeler"][frame_idx]])
+            elif target_labels["labeler"][frame_idx] != labels["labeler"][frame_idx]:
+                target_labels["labeler"][frame_idx] = labeler_list_all.index("_various")
 
-                # Update time
-                target_labels["fr_times"][frame_idx] = labels["fr_times"][frame_idx]
+            # Update time
+            target_labels["fr_times"][frame_idx] = labels["fr_times"][frame_idx]
 
     sort_dictionaries(target_labels)
 
