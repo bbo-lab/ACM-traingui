@@ -2,24 +2,24 @@
 # FILES - WARNING: Filenames must NOT contain \ (not even from Python functions like os.dirname(__file__) on Windows)!
 'autoLoad': True,
 'standardModelFile': datadir+'/model/model.npy', # datadir translates to [currentfile]/../../../data
-'standardSketchFile': datadir+'/sketch/20210511_sketch_1_ds.npy',
-'standardRecordingFolder': datadir+'/ccv/M220217_DW01',
-'standardRecordingFileNames': list([
+'standardSketchFile': datadir+'/sketch/sketch.npy', # Sketch of animal with markings, see example file
+'standardRecordingFolder': datadir+'/ccv/M220217_DW01', # Folder containing the recordings from ONE dataset. Datset name will be pulled from this folder name.
+'standardRecordingFileNames': list([ # List of individual label files
                                     'cam01VI_20220217_1.ccv',
                                     'cam02VI_20220217_1.ccv',
                                     'cam03VI_20220217_1.ccv',
                                     'cam04VI_20220217_1.ccv',
                                    ]),
-'standardCalibrationFile': 'multicalibration.npy',
-'standardOriginCoordFile': 'origin_coord.npy',
+'standardCalibrationFile': datadir+'/model/calib.npy',  # Camera setup calibration. Note that this is the _v1.npy version of calibcam output
+'standardOriginCoordFile': datadir+'/origin/origin.npy', # Coordinate origin in camera coordinates. Possibly not needed from training?
 'standardLabelsFile': 'labels.npy',
 'invert_xaxis': False,
 'invert_yaxis': True,
 # GENERAL
 'cam': int(0),
-'minPose': int(0),
-'maxPose': int(1e9),
-'dFrame': int(50),
+'minPose': int(0),  # Frame for this assistant to start
+'maxPose': int(1e9), # Frame for this assistant to end
+'dFrame': int(50), # Gap between frames for this assistant
 # mode activation
 'button_fastLabelingMode_activate': False,
 'button_centricViewMode_activate': False,
