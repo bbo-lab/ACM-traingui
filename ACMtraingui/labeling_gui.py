@@ -1258,12 +1258,13 @@ class MainWindow(QMainWindow):
 
     def change_label(self, d_label_idx):
         selected_label_name = self.get_current_label()
-        selected_label_index = list(self.labels['labels'].keys()).index(selected_label_name)
+        label_keys = list(self.get_sketch_labels().keys())
+        selected_label_index = label_keys.index(selected_label_name)
         next_label_index = selected_label_index + d_label_idx
-        if next_label_index >= np.size(list(self.labels['labels'].keys())):
+        if next_label_index >= np.size(label_keys):
             next_label_index = 0
         elif next_label_index < 0:
-            next_label_index = np.size(list(self.labels['labels'].keys())) - 1
+            next_label_index = np.size(label_keys) - 1
         self.controls['lists']['labels'].setCurrentRow(next_label_index)
         self.list_labels_select()
         self.controls['buttons']['next_label'].clearFocus()
