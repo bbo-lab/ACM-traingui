@@ -1,9 +1,10 @@
 import os
+import re
 
 def load_cfg(path):
     cfg_file = open(path, 'r')
     configtxt = cfg_file.read()
-    datadir = os.path.dirname(os.path.abspath(path)).replace('\\\\', '/')+'/../../../data'
+    datadir = datadir = re.sub(r'\\', '/', os.path.dirname(os.path.abspath(path)))+'/../../../data'
     cfg = eval(configtxt) # this is ugly since eval is used (make sure only trusted strings are evaluated)
     cfg_file.close()
     #sys.path.insert(0,os.path.dirname(path))
