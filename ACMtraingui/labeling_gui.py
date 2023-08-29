@@ -1021,6 +1021,13 @@ class MainWindow(QMainWindow):
         controls_layout_grid.addWidget(button_rotate, row, col)
         controls['buttons']['rotate'] = button_rotate
         controls['frames']['controls'].setLayout(controls_layout_grid)
+        row = row + 1
+        col = 0
+
+        label_dxyz = QLabel()
+        label_dxyz.setText('')
+        controls_layout_grid.addWidget(label_dxyz, row, col)
+        controls['labels']['labeler'] = label_dxyz
 
         self.controls = controls
 
@@ -1318,6 +1325,12 @@ class MainWindow(QMainWindow):
             self.cameras[i_cam]['y_lim_prev'] = self.controls['axes']['2d'].get_ylim()  # [::-1]
 
         self.controls['fields']['current_pose'].setText(str(self.get_pose_idx()))
+        if self.get_pose_idx() in self.labels["labeler"]:
+            self.controls['labels']['labeler'].setText(
+                self.labels["labeler_list"][self.labels["labeler"][self.get_pose_idx()]]
+            )
+        else:
+            print(self.labels)
         self.list_labels_select()
         self.sketch_update()
 
