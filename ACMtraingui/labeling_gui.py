@@ -107,6 +107,7 @@ class MainWindow(QMainWindow):
         }
 
         self.labels = label_data.get_empty_labels()
+        self.neighbor_points = {}
 
         # Sketch zoom stuff
         self.sketch_zoom_dy = None
@@ -451,8 +452,8 @@ class MainWindow(QMainWindow):
 
         # Only subsequent frames seem to come up correctly
         # TODO: Implement only loading the previous frame if it wasnt loaded directly before?
-        if self.pose_idx>0:
-            img = reader.get_data(self.pose_idx-1)
+        if self.pose_idx > 0:
+            img = reader.get_data(self.pose_idx - 1)
         img = reader.get_data(self.pose_idx)
 
         if self.controls['plots']['image2d'] is None:
@@ -498,37 +499,74 @@ class MainWindow(QMainWindow):
         frame_idx = self.get_pose_idx()
         current_label_name = self.get_current_label()
 
+        # Initialize
         if '2d' not in self.controls['plots']:
             self.controls['plots']['2d'] = {}
-        for label_name in self.controls['plots']['2d']:
-            try:
-                self.controls['plots']['2d'][label_name].remove()
-            except ValueError:
-                pass
+        if '2d_neighbor' not in self.controls['plots']:
+            self.controls['plots']['2d_neighbor'] = {}
 
+        # Remove labels
+        for tn in ["2d", "2d_neighbor"]:
+            for label_name in self.controls['plots'][tn]:
+                try:
+                    self.controls['plots'][tn][label_name].remove()
+                except ValueError:
+                    pass
+
+        # Build neighbor points
+        # TODO: Do a better estimation, e.g. adjust to close by points
         for label_name in self.labels['labels']:
-            if frame_idx not in self.labels['labels'][label_name]:
-                continue
+            self.neighbor_points[label_name] = np.full((1, 2), np.nan)
+            for fr_idx in (frame_idx - 1, frame_idx + 1):
+                if fr_idx in self.labels['labels'][label_name]:
+                    self.neighbor_points[label_name] = np.nanmean([self.neighbor_points[label_name],
+                                                                   self.labels['labels'][label_name][fr_idx]],
+                                                                  axis=0)
 
-            point = self.labels['labels'][label_name][frame_idx][cam_idx, :]
+        # Plot each label
+        for label_name in self.labels['labels']:
 
-            if current_label_name == label_name:
-                plotparams = {
-                    'color': 'darkgreen',
-                    'markersize': 4,
-                    'zorder': 3,
-                }
+            if frame_idx in self.labels['labels'][label_name] and \
+                    not np.any(np.isnan(self.labels['labels'][label_name][frame_idx])):
+                # Plot acutal labels
+                point = self.labels['labels'][label_name][frame_idx][cam_idx, :]
+
+                if current_label_name == label_name:
+                    plotparams = {
+                        'color': 'darkgreen',
+                        'markersize': 4,
+                        'zorder': 3,
+                    }
+                else:
+                    plotparams = {
+                        'color': 'cyan',
+                        'markersize': 3,
+                        'zorder': 2,
+                    }
+                print(f"label {label_name} {frame_idx}: {point}")
+                self.controls['plots']['2d'][label_name] = ax.plot([point[0]], [point[1]],
+                                                                   marker='o',
+                                                                   **plotparams,
+                                                                   )[0]
             else:
-                plotparams = {
-                    'color': 'cyan',
-                    'markersize': 3,
-                    'zorder': 2,
-                }
-            print(f"label {label_name} {frame_idx}: {point}")
-            self.controls['plots']['2d'][label_name] = ax.plot([point[0]], [point[1]],
-                                                               marker='o',
-                                                               **plotparams,
-                                                               )[0]
+                # Plot neighbor points
+                if current_label_name == label_name:
+                    plotparams = {
+                        'color': 'darkgreen',
+                        'markersize': 4,
+                        'zorder': 1,
+                    }
+                else:
+                    plotparams = {
+                        'color': 'cyan',
+                        'markersize': 3,
+                        'zorder': 0,
+                    }
+                self.controls['plots']['2d_neighbor'][label_name] = ax.plot(*self.neighbor_points[label_name][0],
+                                                                            marker='+',
+                                                                            **plotparams,
+                                                                            )[0]
+
         print("=============")
 
     def plot2d_click(self, event):
@@ -575,6 +613,24 @@ class MainWindow(QMainWindow):
                                 not np.any(np.isnan(self.labels['labels'][ln][frame_idx][cam_idx])):
                             point_dists.append(
                                 np.linalg.norm(self.labels['labels'][ln][frame_idx][cam_idx] - coords))
+                        else:
+                            point_dists.append(1000000000)
+
+                    label_idx = point_dists.index(min(point_dists))
+                    self.controls['lists']['labels'].setCurrentRow(label_idx)
+                    self.list_labels_select()
+
+                elif event.button == 1 and modifiers == QtCore.Qt.ControlModifier:
+                    x = event.xdata
+                    y = event.ydata
+                    coords = np.array([x, y], dtype=np.float64)
+                    point_dists = []
+                    label_names = list(self.get_sketch_labels().keys())
+                    for ln in label_names:
+                        if ln in self.labels['labels'] and \
+                                not np.any(np.isnan(self.neighbor_points[ln])):
+                            point_dists.append(
+                                np.linalg.norm(self.neighbor_points[ln] - coords))
                         else:
                             point_dists.append(1000000000)
 
@@ -718,6 +774,7 @@ class MainWindow(QMainWindow):
                                                           zorder=1)[0]
 
     def sketch_update(self):
+        # Updates labels on the sketch
         sketch_labels = self.get_sketch_labels()
         label_names = list(self.labels['labels'].keys())
 
@@ -1335,6 +1392,11 @@ class MainWindow(QMainWindow):
         self.sketch_update()
 
         self.plot2d_draw()
+
+        for i_cam in range(len(self.cameras)):
+            self.controls['axes']['2d'].set_xlim(self.cameras[i_cam]['x_lim_prev'])
+            self.controls['axes']['2d'].set_ylim(self.cameras[i_cam]['y_lim_prev'])  # [::-1]
+        self.controls['figs']['2d'].canvas.draw()
 
     def button_save_labels_press(self):
         if self.master:
