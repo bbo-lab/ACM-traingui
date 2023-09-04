@@ -517,11 +517,25 @@ class MainWindow(QMainWindow):
         # TODO: Do a better estimation, e.g. adjust to close by points
         for label_name in self.labels['labels']:
             self.neighbor_points[label_name] = np.full((1, 2), np.nan)
-            for fr_idx in (frame_idx - 1, frame_idx + 1):
-                if fr_idx in self.labels['labels'][label_name]:
+            for offs in range(1, 4):
+                # Try to take mean of symmetrical situation
+                if frame_idx-offs in self.labels['labels'][label_name] and \
+                        not np.any(np.isnan(frame_idx - offs in self.labels['labels'][label_name])) and\
+                        frame_idx+offs in self.labels['labels'][label_name] and \
+                        not np.any(np.isnan(frame_idx+offs in self.labels['labels'][label_name])):
                     self.neighbor_points[label_name] = np.nanmean([self.neighbor_points[label_name],
-                                                                   self.labels['labels'][label_name][fr_idx]],
+                                                                   self.labels['labels'][label_name][frame_idx-offs],
+                                                                   self.labels['labels'][label_name][frame_idx+offs]
+                                                                   ],
                                                                   axis=0)
+                    break
+
+            if np.any(np.isnan(self.neighbor_points[label_name])):
+                # Fill from one closest neighbor, TODO: Counter from other side even if not symmetrical?
+                for offs in [-1, 1, -2, 2, -3, 3]:
+                    if frame_idx+offs in self.labels['labels'][label_name]:
+                        self.neighbor_points[label_name] = self.labels['labels'][label_name][frame_idx+offs]
+                        break
 
         # Plot each label
         for label_name in self.labels['labels']:
