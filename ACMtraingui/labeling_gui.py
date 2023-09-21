@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import QAbstractItemView, \
     QLineEdit, \
     QListWidget, \
     QMainWindow, \
-    QPushButton
+    QPushButton, QComboBox
 
 from matplotlib import colors as mpl_colors
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -31,14 +31,12 @@ from matplotlib.figure import Figure
 
 from pathlib import Path
 
-from tqdm.gui import tqdm
-
 from ACMtraingui import label_data
 from ACMtraingui.config import load_cfg, save_cfg
 from ACMtraingui.helper_gui import update_button_stylesheet, disable_button, get_button_status, toggle_button
 from ACMtraingui.select_user import SelectUserWindow
 from ACMtraingui.helper_video import read_video_meta
-from svidreader import SVidReader
+import svidreader
 
 
 class MainWindow(QMainWindow):
@@ -125,9 +123,17 @@ class MainWindow(QMainWindow):
 
         self.minPose = self.cfg['minPose']
         self.maxPose = self.cfg['maxPose']
+        if 'allowed_cams' in self.cfg:
+            self.allowed_cams = self.cfg['allowed_cams']
+        else:
+            self.allowed_cams = list(range(len(self.cfg['standardRecordingFileNames'])))
+
         self.pose_idx = self.minPose
 
-        self.i_cam = self.cfg['cam']
+        if 'cam' in self.cfg:
+            self.camera_idx = self.cfg['cam']
+        else:
+            self.camera_idx = min(self.allowed_cams)
 
         self.colors = []
         self.init_colors()
@@ -262,33 +268,34 @@ class MainWindow(QMainWindow):
 
     def load_recordings_from_names(self, names):
         # load recording
-        if np.all([i_file.is_file() for i_file in names]):
-            self.recordingIsLoaded = True
+        # try:
+        self.recordingIsLoaded = True
 
-            cameras = []
-            for file_name in names:
-                if file_name:
-                    print(file_name)
-                    reader = SVidReader(file_name, hash_iterator=tqdm)
-                    print(1)
-                    header = read_video_meta(reader)
-                    print(2)
-                    cam = {
-                        'file_name': file_name,
-                        'reader': reader,
-                        'header': header,
-                        'x_lim_prev': (0, header['sensorsize'][0]),
-                        'y_lim_prev': (0, header['sensorsize'][1]),
-                        'rotate': False,
-                    }
-                    cameras.append(cam)
-                else:
-                    print(f'WARNING: Invalid recording file {file_name}')
+        cameras = []
+        for file_name in names:
+            if file_name:
+                print(file_name)
+                print(svidreader.__file__)
+                reader = svidreader.get_reader(file_name.as_posix(), backend="iio", cache=True)
+                print(1)
+                header = read_video_meta(reader)
+                print(2)
+                cam = {
+                    'file_name': file_name,
+                    'reader': reader,
+                    'header': header,
+                    'x_lim_prev': (0, header['sensorsize'][0]),
+                    'y_lim_prev': (0, header['sensorsize'][1]),
+                    'rotate': False,
+                }
+                cameras.append(cam)
+            else:
+                print(f'WARNING: Invalid recording file {file_name}')
 
-            self.cameras = cameras
+        self.cameras = cameras
+        # except Exception as e:
 
-        else:
-            print(f'WARNING: Autoloading failed. Recording files do not exist: {names}')
+        # print(f'WARNING: Autoloading failed. Recording files do not exist: {file_name} {e}')
 
     def get_n_poses(self):
         return [cam["header"]["nFrames"] for cam in self.cameras]
@@ -355,9 +362,31 @@ class MainWindow(QMainWindow):
         return self.pose_idx
 
     def set_pose_idx(self, pose_idx):
+        pose_idx = int(pose_idx)
+        if pose_idx < self.minPose:
+            pose_idx = self.minPose
+        elif self.pose_idx > self.maxPose:
+            pose_idx = self.maxPose
         self.pose_idx = pose_idx
-        if (self.pose_idx < self.minPose) or (self.pose_idx > self.maxPose):
-            self.pose_idx = self.minPose
+        self.plot2d_change_frame()
+        if 'next' in self.controls['buttons']:
+            self.controls['buttons']['next'].clearFocus()
+
+    def combo_lists_cams_change(self, new_index):
+        print(new_index, type(new_index))
+        self.set_camera_idx(int(self.controls['lists']['cams'].itemText(new_index).split(" ")[1]))
+
+    def set_camera_idx(self, camera_idx):
+
+        if not isinstance(camera_idx, int):
+            camera_idx = int(camera_idx)
+
+        if camera_idx not in self.allowed_cams:
+            return
+
+        self.camera_idx = camera_idx
+        self.plot2d_change_frame()
+        self.controls['buttons']['next'].clearFocus()
 
     def set_layout(self):
         # frame main
@@ -415,7 +444,7 @@ class MainWindow(QMainWindow):
         ax = fig.add_subplot(111)
         ax.clear()
         self.controls['axes']['2d'] = ax
-        self.plot2d_plot(self.controls['axes']['2d'], self.i_cam)
+        self.plot2d_plot(self.controls['axes']['2d'], self.camera_idx)
 
         self.controls['grids']['views2d'].addWidget(canvas, 0, 0)
         self.controls['toolbars']['views2d'] = NavigationToolbar2QT(canvas, self)
@@ -444,7 +473,7 @@ class MainWindow(QMainWindow):
         if get_button_status(self.controls['buttons']['pan']):
             self.button_pan_press()
 
-        self.plot2d_plot(self.controls['axes']['2d'], self.i_cam)
+        self.plot2d_plot(self.controls['axes']['2d'], self.camera_idx)
         self.controls['figs']['2d'].canvas.draw()
 
     def plot2d_plot(self, ax, i_cam):
@@ -495,7 +524,7 @@ class MainWindow(QMainWindow):
     def plot2d_draw_labels(self, ax):
         # ax.lines = list()
 
-        cam_idx = self.i_cam
+        cam_idx = self.camera_idx
         frame_idx = self.get_pose_idx()
         current_label_name = self.get_current_label()
 
@@ -519,13 +548,13 @@ class MainWindow(QMainWindow):
             self.neighbor_points[label_name] = np.full((1, 2), np.nan)
             for offs in range(1, 4):
                 # Try to take mean of symmetrical situation
-                if frame_idx-offs in self.labels['labels'][label_name] and \
-                        not np.any(np.isnan(frame_idx - offs in self.labels['labels'][label_name])) and\
-                        frame_idx+offs in self.labels['labels'][label_name] and \
-                        not np.any(np.isnan(frame_idx+offs in self.labels['labels'][label_name])):
+                if frame_idx - offs in self.labels['labels'][label_name] and \
+                        not np.any(np.isnan(frame_idx - offs in self.labels['labels'][label_name])) and \
+                        frame_idx + offs in self.labels['labels'][label_name] and \
+                        not np.any(np.isnan(frame_idx + offs in self.labels['labels'][label_name])):
                     self.neighbor_points[label_name] = np.nanmean([self.neighbor_points[label_name],
-                                                                   self.labels['labels'][label_name][frame_idx-offs],
-                                                                   self.labels['labels'][label_name][frame_idx+offs]
+                                                                   self.labels['labels'][label_name][frame_idx - offs],
+                                                                   self.labels['labels'][label_name][frame_idx + offs]
                                                                    ],
                                                                   axis=0)
                     break
@@ -533,15 +562,15 @@ class MainWindow(QMainWindow):
             if np.any(np.isnan(self.neighbor_points[label_name])):
                 # Fill from one closest neighbor, TODO: Counter from other side even if not symmetrical?
                 for offs in [-1, 1, -2, 2, -3, 3]:
-                    if frame_idx+offs in self.labels['labels'][label_name]:
-                        self.neighbor_points[label_name] = self.labels['labels'][label_name][frame_idx+offs]
+                    if frame_idx + offs in self.labels['labels'][label_name]:
+                        self.neighbor_points[label_name] = self.labels['labels'][label_name][frame_idx + offs]
                         break
 
         # Plot each label
         for label_name in self.labels['labels']:
 
             if frame_idx in self.labels['labels'][label_name] and \
-                    not np.any(np.isnan(self.labels['labels'][label_name][frame_idx])):
+                    not np.any(np.isnan(self.labels['labels'][label_name][frame_idx][cam_idx])):
                 # Plot acutal labels
                 point = self.labels['labels'][label_name][frame_idx][cam_idx, :]
 
@@ -589,7 +618,7 @@ class MainWindow(QMainWindow):
             ax = event.inaxes
 
             # Initialize array
-            cam_idx = self.i_cam
+            cam_idx = self.camera_idx
             frame_idx = self.get_pose_idx()
             label_name = self.get_current_label()
 
@@ -932,6 +961,16 @@ class MainWindow(QMainWindow):
         row = row + 1
         col = 0
 
+        col += 1
+        controls['lists']['cams'] = QComboBox()
+        controls['lists']['cams'].addItems(["Camera "+str(i) for i in self.allowed_cams])
+        # controls['lists']['cams'].setSizePolicy(QSizePolicy.Expanding,
+        #                                          QSizePolicy.Preferred)
+        controls['lists']['cams'].currentIndexChanged.connect(self.combo_lists_cams_change)
+        controls_layout_grid.addWidget(controls['lists']['cams'], row, col)
+        row = row + 1
+        col = 0
+
         button_save_labels = QPushButton()
         button_save_labels.setText('Save Labels (S)')
         button_save_labels.clicked.connect(self.button_save_labels_press)
@@ -1226,7 +1265,7 @@ class MainWindow(QMainWindow):
 
     def button_rotate_press(self):
         if self.recordingIsLoaded:
-            self.cameras[self.i_cam]["rotate"] = not self.cameras[self.i_cam]["rotate"]
+            self.cameras[self.camera_idx]["rotate"] = not self.cameras[self.camera_idx]["rotate"]
 
             self.controls['axes']['2d'].invert_xaxis()
             self.controls['axes']['2d'].invert_yaxis()
@@ -1349,13 +1388,9 @@ class MainWindow(QMainWindow):
 
     def button_next_press(self):
         self.set_pose_idx(self.get_pose_idx() + self.dFrame)
-        self.plot2d_change_frame()
-        self.controls['buttons']['next'].clearFocus()
 
     def button_previous_press(self):
         self.set_pose_idx(self.get_pose_idx() - self.dFrame)
-        self.plot2d_change_frame()
-        self.controls['buttons']['previous'].clearFocus()
 
     def field_current_pose_change(self):
         try:
@@ -1365,7 +1400,6 @@ class MainWindow(QMainWindow):
             return
 
         self.set_pose_idx(current_pose_idx)
-        self.plot2d_change_frame()
         self.controls['fields']['current_pose'].setText(str(self.get_pose_idx()))
         self.list_labels_select()
         self.sketch_update()
@@ -1395,13 +1429,17 @@ class MainWindow(QMainWindow):
             self.cameras[i_cam]['x_lim_prev'] = self.controls['axes']['2d'].get_xlim()
             self.cameras[i_cam]['y_lim_prev'] = self.controls['axes']['2d'].get_ylim()  # [::-1]
 
-        self.controls['fields']['current_pose'].setText(str(self.get_pose_idx()))
         if self.get_pose_idx() in self.labels["labeler"]:
             self.controls['labels']['labeler'].setText(
                 self.labels["labeler_list"][self.labels["labeler"][self.get_pose_idx()]]
             )
         else:
             print(self.labels)
+
+        if len(self.controls['fields'].items())==0:  # we are not yet initialized. probably unnecessary after cleanup
+            return
+
+        self.controls['fields']['current_pose'].setText(str(self.get_pose_idx()))
         self.list_labels_select()
         self.sketch_update()
 
