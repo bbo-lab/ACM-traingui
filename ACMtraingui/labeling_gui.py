@@ -274,7 +274,7 @@ class MainWindow(QMainWindow):
         cameras = []
         for file_name in names:
             if file_name:
-                print(file_name)
+                print(f"File name: {file_name}")
                 print(svidreader.__file__)
                 reader = svidreader.get_reader(file_name.as_posix(), backend="iio", cache=True)
                 print(1)
@@ -553,8 +553,8 @@ class MainWindow(QMainWindow):
                         frame_idx + offs in self.labels['labels'][label_name] and \
                         not np.any(np.isnan(frame_idx + offs in self.labels['labels'][label_name])):
                     self.neighbor_points[label_name] = np.nanmean([self.neighbor_points[label_name],
-                                                                   self.labels['labels'][label_name][frame_idx - offs],
-                                                                   self.labels['labels'][label_name][frame_idx + offs]
+                                                                   self.labels['labels'][label_name][frame_idx - offs][(self.camera_idx,),],
+                                                                   self.labels['labels'][label_name][frame_idx + offs][(self.camera_idx,),]
                                                                    ],
                                                                   axis=0)
                     break
