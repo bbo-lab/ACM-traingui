@@ -1,3 +1,5 @@
+*Warning: Instead of this dev branch, use bbo-labelgui instead. Note that bbo-labelgui does not imply the pose subdirectory anymore.*
+
 # ACMtraingui
 
 GUI to label frames for training of ACM-dlcdetect, by Arne Monsees
